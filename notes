@@ -14,7 +14,9 @@ computational power)
 I used a 37 machine cluster with m3.8xlarge instances launched from
 StarCluster, which I use to manage the installation of Hadoop, Spark, and the
 packages necessary to read GRIB format files. The specific StarCluster plugins
-used are included for completeness
+used are included for completeness (I used a custom Ubuntu 15.04 AMI which can
+be provided at request, but the specific AMI shouldn't matter much *fingers
+crossed*)
 
 ## Data Conversion
 
