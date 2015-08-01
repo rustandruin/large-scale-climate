@@ -1,4 +1,7 @@
 #!/usr/env python
+# NB: if you write to local HDFS, ensure that the directories
+# "/user/ubuntu/CSFROcsv/vals" and "/user/ubuntu/CSFROcsv/mask" exist
+#
 # This code converts a GRIB climate dataset stored on S3 to csv and either writes it to local HDFS or back to S3.
 # It can be run simultaneously in several processes on several machines, to facilitate processing large amounts of data,
 # and can be stopped and restarted (assuming it isn't stopped while in the process of actually writing a file) without
@@ -6,7 +9,6 @@
 #
 # call with convertGRIBtoCSV.py AWS_KEY AWS_SECRET_KEY NUMPROCESSES MYREMAINDER (see below for explanation)
 
-from pyspark import SparkContext
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 import numpy as np
@@ -14,23 +16,20 @@ import pydoop.hdfs as hdfs
 import pygrib
 import gzip
 from datetime import datetime
-import os
+import os, sys
 
 # output_to_S3_flag: false, if want output to be stored on local HDFS
 # compressed_flag:  if true, output will be gzip compressed
 # numprocesses needs to be prime, to ensure only one process tries to process each record
 # myremainder should be a unique number between 0 and process - 1 that identifies the records this process will attempt to convert
 
-def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_flag = true, output_to_S3_flag = false):
+def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_flag = False, output_to_S3_flag = False):
 
     conn = S3Connection(aws_key, aws_secret_key)
 
     # source of the CSFR-O data, as a set of grb2 files
     bucket = conn.get_bucket('agittens')
-    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06')
-
-    # NB: if you write to local HDFS, ensure that the directories
-    # "/user/ubuntu/CSFROcsv/vals" and "/user/ubuntu/CSFROcsv/mask" exist
+    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06.gdas.197901')
 
     # make the vals and masks vectors global because they're huge, so don't want to reallocate them 
     dimsperlevel = 360*720
@@ -130,6 +129,8 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
                 hdfs.put(tempvalsfname, valsfname)
                 hdfs.put(tempmaskfname, maskfname)
                 report("Wrote {0} to {1} and {2} on HDFS".format(inkey.name, valsfname, maskfname))
+	    os.remove(tempvalsfname)
+            os.remove(tempmaskfname)
         except:
             report("Skipping record {0}! An error occurred processing {1}".format(recordnum, inkey.name))
             error_fh.write("Skipped {1}, record {0}\n".format(inkey.name, recordnum))
@@ -143,6 +144,6 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
         pass
 
 if __name__ == "__main__":
-    convertGRIBs(argv[1], argv[2], int(argv[3]), int(argv[4]))
+    convertGRIBs(sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
 
 
