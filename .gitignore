@@ -2,4 +2,5 @@
 target/*
 project/project/*
 project/target/*
-
+*.log
+eventLogs/*
