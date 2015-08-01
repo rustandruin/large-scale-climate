@@ -5,6 +5,11 @@ libraryDependencies += "org.apache.spark" %% "spark-mllib" % "1.3.1" % "provided
 libraryDependencies += "com.github.fommil.netlib" % "all" % "1.1.2"
 libraryDependencies += "io.spray" %% "spray-json" % "1.3.2"
 
+lazy val runConversion = taskKey[Unit]("Convert GRIB Data to Parquet")
+runConversion <<= (assembly in Compile) map {
+  (jarFile: File) => s"src/runparallelconversion.sh $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" !
+}
+
 lazy val runTest = taskKey[Unit]("Submit climate test job")
 runTest <<= (assembly in Compile) map {
   (jarFile: File) => s"spark-submit --driver-memory 4G --class org.apache.mllib.linalg.distributed.computeEOF ${jarFile} test" !
