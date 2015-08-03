@@ -111,8 +111,7 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
             with myopen(tempvalsfname, 'w') as valsfout:
                 with myopen(tempmaskfname, 'w') as maskfout:
                     for index in range(0, vals.shape[0]):
-                        if (vals[index] > 0):
-                            valsfout.write("{0},{1},{2}\n".format(recordnum, index, vals[index]))
+                        valsfout.write("{0},{1},{2}\n".format(recordnum, index, vals[index]))
                         if (mask[index] > 0):
                             maskfout.write("{0},{1},{2}\n".format(recordnum, index, mask[index]))
             report("Wrote numpy arrays to local files")
