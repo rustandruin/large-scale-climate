@@ -4,3 +4,6 @@ project/project/*
 project/target/*
 *.log
 eventLogs/*
+*.swp
+runlog*
+grib_conversion*

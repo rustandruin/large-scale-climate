@@ -8,8 +8,8 @@ LOGNAME=$CURDIR/../CSVToParquetConversion.log
 
 spark-submit --verbose \
 	--master yarn \
-	--driver-memory 5G \
-	--executor-memory 5G \
+	--driver-memory 80G \
+	--executor-memory 80G \
 	--conf spark.eventLog.enable=true \
 	--conf spark.eventLog.dir=$LOGDIR \
 	--jars $JARNAME \

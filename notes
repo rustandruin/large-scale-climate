@@ -1,3 +1,9 @@
+--- NEED TO MAKE /mnt3/ubuntu writable by ubuntu for convertGrib python code to work:
+use the configureInstances.sh script to mount the SSD drives for r3.8xlarge instances
+then create a /mnt3/ubuntu directory and chown it to ubuntu:ubuntu
+--- NEED TO CONFIGURE YARN:
+see the notes on my mac/the implementation on fullclimatecluster
+
 These notes serve as a high-level overview of the functions of the code in this
 repository, and a rough guide to using the code. The goal is to make it
 relatively painless for a first-time user with access to AWS to reproduce our

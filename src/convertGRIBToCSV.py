@@ -29,7 +29,7 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
 
     # source of the CSFR-O data, as a set of grb2 files
     bucket = conn.get_bucket('agittens')
-    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06.gdas.197901')
+    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06.gdas')
 
     # make the vals and masks vectors global because they're huge, so don't want to reallocate them 
     dimsperlevel = 360*720
@@ -40,9 +40,10 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
 
     # returns the set of gribs from an s3 key 
     def get_grib_from_key(inkey):
-        with open('temp{0}'.format(myremainder), 'w') as fin:
+    	tempgribfname = '/mnt3/ubuntu/temp{0}'.format(myremainder)
+        with open(tempgribfname, 'w') as fin:
             inkey.get_file(fin)
-        return pygrib.open('temp{0}'.format(myremainder))
+        return pygrib.open(tempgribfname.format(myremainder))
 
     # index of the gribs within the grib file that correspond to SST and sub surface sea temperatures
     gribindices = range(1,41)
@@ -101,13 +102,13 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
         # convert the observations and write them out to HDFS/S3 compressed/uncompressed
         try:
             grbs = get_grib_from_key(inkey)
-            report("Retrieved {0} from S".format(inkey.name))
+            report("Retrieved {0} from S3".format(inkey.name))
         
             (vals, mask) = converttovec(grbs)
             report("Converted {0} to numpy arrays".format(inkey.name))
         
-            tempvalsfname = 'tempvals{0}'.format(myremainder)
-            tempmaskfname = 'tempmask{0}'.format(myremainder)
+            tempvalsfname = '/mnt3/ubuntu/tempvals{0}'.format(myremainder)
+            tempmaskfname = '/mnt3/ubuntu/tempmask{0}'.format(myremainder)
             with myopen(tempvalsfname, 'w') as valsfout:
                 with myopen(tempmaskfname, 'w') as maskfout:
                     for index in range(0, vals.shape[0]):
