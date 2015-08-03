@@ -25,11 +25,11 @@ LOGNAME="$JOBNAME.log"
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
 spark-submit --verbose \
-  --driver-memory 100G \
-  --executor-memory 100G \
+  --driver-memory 5G \
+  --executor-memory 5G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
-  --conf spark.driver.maxResultSize=72G \
+  --conf spark.driver.maxResultSize=4G \
   --jars $JARNAME \
   --class org.apache.spark.mllib.linalg.distributed.SVDVariants \
   $JARNAME \
