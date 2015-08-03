@@ -5,7 +5,7 @@ LOGDIR="$DIR/eventlogs"
 DATADIR="$DIR/data"
 JARNAME=$1
 
-INSOURCE=hdfs:///CSFROcsv/vals
+INSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/vals
 FORMAT=csv
 NUMROWS= 46728
 NUMCOLS= 10627200
