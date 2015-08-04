@@ -50,8 +50,8 @@ object computeEOFs {
   def appMain(sc: SparkContext, args: Array[String]) = {
     val matformat = args(0)
     val inpath = args(1)
-    val numrows = args(2).toLong
-    val numcols = args(3).toInt
+    val numrows = args(2).toInt
+    val numcols = args(3).toLong
     val preprocessMethod = args(4)
     val numeofs = args(5).toInt
     val outdest = args(6)
@@ -89,35 +89,42 @@ object computeEOFs {
   }
 
   // For now, assume input is always csv and that rows are all observed, and that only mean centering is desired
-  def loadCSVClimateData(sc: SparkContext, matformat: String, inpath: String, numrows: Long, 
-    numcols: Int, preprocessMethod: String) : Tuple2[IndexedRowMatrix, BDV[Double]] = {
-    val rows = sc.textFile(inpath).map(x => x.split(",")).
+  def loadCSVClimateData(sc: SparkContext, matformat: String, inpath: String, numrows: Int, 
+    numcols: Long, preprocessMethod: String) : Tuple2[IndexedRowMatrix, BDV[Double]] = {
+    var rows = sc.textFile(inpath).map(x => x.split(",")).
       map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
       groupByKey.map(x => new IndexedRow(x._1, new 
         DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
     rows.persist(StorageLevel.MEMORY_AND_DISK)
-    val mat = new IndexedRowMatrix(rows, numrows, numcols)
-    val mean = getRowMean(mat)
+
+    val distinctrowids = rows.map( x => x.index.toInt ).distinct().collect()
+    def getrowid(i: Int) = Arrays.binarySearch(distinctrowids, i)
+
+    val reindexedrows = rows.map(x => new IndexedRow(getrowid(x.index.toInt), x.vector))
+    reindexedrows.persist(StorageLevel.MEMORY_AND_DISK)
+    val mat = new IndexedRowMatrix(reindexedrows, numcols, numrows)
+    val mean = getRowMeans(mat)
     val centeredmat = subtractMean(mat, mean)
     centeredmat.rows.persist(StorageLevel.MEMORY_AND_DISK)
+
+    rows.unpersist()
     mat.rows.unpersist()
     centeredmat.rows.count()
+
     (centeredmat, mean)
   }
 
-  def getRowMean(mat: IndexedRowMatrix) : BDV[Double] = {
-    1.0/mat.numRows * mat.rows.treeAggregate(BDV.zeros[Double](mat.numCols.toInt))(
-      seqOp = (avg: BDV[Double], row: IndexedRow) => {
-        val rowBrz = row.vector.toBreeze.asInstanceOf[BDV[Double]]
-        avg += rowBrz
-      },
-      combOp = (avg1, avg2) => avg1 += avg2
-      )
+  // returns a column vector of the means of each row
+  def getRowMeans(mat: IndexedRowMatrix) : BDV[Double] = {
+    val scaling = 1.0/mat.numCols
+    val mean = BDV.zeros[Double](mat.numRows.toInt)
+    val meanpairs = mat.rows.map( x => (x.index, scaling * x.vector.toArray.sum)).collect()
+    meanpairs.foreach(x => mean(x._1.toInt) = x._2)
+    mean
   }
 
   def subtractMean(mat: IndexedRowMatrix, mean: BDV[Double]) : IndexedRowMatrix = {
-    val centeredrows = mat.rows.map(x => new IndexedRow(x.index, 
-      new DenseVector((x.vector.toBreeze.asInstanceOf[BDV[Double]] - mean).toArray)))
+    val centeredrows = mat.rows.map(x => new IndexedRow(x.index, new DenseVector(x.vector.toArray.map(v => v - mean(x.index.toInt)))))
     new IndexedRowMatrix(centeredrows, mat.numRows, mat.numCols.toInt)
   }
 

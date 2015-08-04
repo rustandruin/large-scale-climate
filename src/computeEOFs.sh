@@ -1,14 +1,15 @@
+#!/usr/bin/env bash
 # Computes the 3D EOFs using CSFR-O dataset
 
 DIR="$(cd "`dirname "$0"`"/..; pwd)"
-LOGDIR="$DIR/eventlogs"
+LOGDIR="$DIR/eventLogs"
 DATADIR="$DIR/data"
 JARNAME=$1
 
 INSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/vals
 FORMAT=csv
-NUMROWS= 46728
-NUMCOLS= 10627200
+NUMROWS=104
+NUMCOLS=6349676
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=32
@@ -26,7 +27,7 @@ spark-submit --verbose \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=4G \
   --jars $JARNAME \
-  --class org.apache.spark.mllib.linalg.distributed.SVDVariants \
+  --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
   $FORMAT $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST \
   2>&1 | tee $LOGNAME
