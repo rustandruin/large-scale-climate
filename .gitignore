@@ -7,3 +7,4 @@ eventLogs/*
 *.swp
 runlog*
 grib_conversion*
+conversion_error_log

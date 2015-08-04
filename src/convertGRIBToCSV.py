@@ -23,7 +23,7 @@ import os, sys
 # numprocesses needs to be prime, to ensure only one process tries to process each record
 # myremainder should be a unique number between 0 and process - 1 that identifies the records this process will attempt to convert
 
-def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_flag = False, output_to_S3_flag = False):
+def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_flag = True, output_to_S3_flag = False):
 
     conn = S3Connection(aws_key, aws_secret_key)
 
@@ -145,5 +145,3 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
 
 if __name__ == "__main__":
     convertGRIBs(sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
-
-

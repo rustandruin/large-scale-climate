@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Call with runparallelconversion.sh AWS_KEY AWS_SECRET_KEY from the master node as user ubuntu
 
-# if you change these numbers, note that MASTERPROCESSES + numslaves * SLAVEPROCESSES must be prime
-# this setting works for 25 machines (24 slaves 1 master)
+# if you change these numbers, note that MASTERPROCESSES + numslaves *
+# SLAVEPROCESSES must be prime this setting works for 25 machines (24 slaves 1
+# master) might need to change to 7,5 afterwards and rerun to deal with files
+# skipped b/c there were too many ssh connections (pay attention to the ssh
+# outputs as you run this script to see if this is necessary)
 SLAVEPROCESSES=10
 MASTERPROCESSES=11
 NUMSLAVES=$((`wc -l /home/mpich2.hosts | cut -f 1 -d " "` - 1))
