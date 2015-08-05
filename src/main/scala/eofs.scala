@@ -67,17 +67,18 @@ object computeEOFs {
     val climateEOFs = convertLowRankFactorizationToEOFs(u, v)
     writeOut(outdest, climateEOFs, mean)
 
-    val approxvariance = climateEOFs.S.toArray.map(math.pow(_,2)).sum
-    report(s"Variance of low-rank approximation: $approxvariance")
-    val datavariance = mat.rows.map(x => x.vector.toArray.map(math.pow(_,2)).sum).sum
-    report(s"Data variance: $datavariance")
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
     val errorvariance = calcSSE(mat, climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]], 
       diag(BDV(climateEOFs.S.toArray)) * climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]].t)
+    val approxvariance = climateEOFs.S.toArray.map(math.pow(_,2)).sum
+    val datavariance = mat.rows.map(x => x.vector.toArray.map(math.pow(_,2)).sum).sum
+    report(s"Variance of low-rank approximation: $approxvariance")
     report(s"Error variance: $errorvariance")
+    report(s"Data variance: $datavariance")
     report(s"$numeofs EOFs explain ${approxvariance/datavariance} of the variance with ${errorvariance/datavariance} relative error")
+
   }
 
   def calcSSE(mat: IndexedRowMatrix, lhsTall: BDM[Double], rhsFat: BDM[Double]) : Double = {
@@ -88,7 +89,7 @@ object computeEOFs {
           partial
         },
         combOp = (partial1, partial2) => partial1 += partial2,
-        depth = 2
+        depth = 8
       )
       sse(0)
   }
@@ -138,12 +139,7 @@ object computeEOFs {
     //rows.persist(StorageLevel.MEMORY_AND_DISK)
     report("Loaded rows")
 
-    val distinctrowids = if (maskpath eq "notmasked") {
-      rows.map( x => x.index.toInt ).distinct().collect().sortBy(identity)
-    } else {
-      sc.textFile(maskpath).map(x => x.split(",")).map(x => (x(1).toInt, x(2).toInt)).
-        filter(x => x._2 < 1).map(x => x_.1).distinct().collect().sortBy(identity)
-    }
+    val distinctrowids = rows.map( x => x.index.toInt ).distinct().collect().sortBy(identity)
     report(s"Got ${distinctrowids.length} unique IDs")
     def getrowid(i: Int) = Arrays.binarySearch(distinctrowids, i)
 
@@ -182,6 +178,8 @@ object computeEOFs {
   def convertLowRankFactorizationToEOFs(u : DenseMatrix, v : DenseMatrix) : EOFDecomposition = {
     val vBrz = v.toBreeze.asInstanceOf[BDM[Double]]
     val vsvd = svd.reduced(vBrz)
+    // val diff = vsvd.U*diag(BDV(vsvd.S.data))*fromBreeze(vsvd.Vt.t).toBreeze.asInstanceOf[BDM[Double]].t - vBrz
+    // report(s"Sanity check (should be 0): ${diff.data.map(x => x*x).sum}")
     EOFDecomposition(fromBreeze(u.toBreeze.asInstanceOf[BDM[Double]] * vsvd.U), new DenseVector(vsvd.S.data), fromBreeze(vsvd.Vt.t))
   }
 
@@ -210,7 +208,7 @@ object computeEOFs {
          val rowBrz = row.vector.toBreeze.asInstanceOf[BDV[Double]]
          U += (lhsFactor.value)(::, row.index.toInt) * rowBrz.t
        },
-       combOp = (U1, U2) => U1 += U2, depth = 2
+       combOp = (U1, U2) => U1 += U2, depth = 8
      )
    fromBreeze(result)
   }
