@@ -1,12 +1,5 @@
 /* Computes the EOFs of large climate datasets with no missing data
  *
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.mllib.linalg.{DenseVector, DenseMatrix}
-import org.apache.spark.mllib.linalg.EigenValueDecomposition
-import org.apache.spark.mllib.linalg.distributed._
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, svd}
-
  */
 
 package org.apache.spark.mllib.climate
@@ -27,8 +20,19 @@ import scala.collection.mutable.ArrayBuffer
 
 import java.util.Arrays
 import java.io.{DataOutputStream, BufferedOutputStream, FileOutputStream, File}
+import java.util.Calendar
+import java.text.SimpleDateFormat
 
 object computeEOFs {
+
+  def report(message: String, verbose: Boolean = true) = {
+    val now = Calendar.getInstance().getTime()
+    val formatter = new SimpleDateFormat("H:m:s")
+
+    if(verbose) {
+      println("STATUS REPORT (" + formatter.format(now) + "): " + message)
+    }
+  }
 
   case class EOFDecomposition(leftVectors: DenseMatrix, singularValues: DenseVector, rightVectors: DenseMatrix) {
     def U: DenseMatrix = leftVectors
@@ -50,17 +54,43 @@ object computeEOFs {
   def appMain(sc: SparkContext, args: Array[String]) = {
     val matformat = args(0)
     val inpath = args(1)
-    val numrows = args(2).toInt
-    val numcols = args(3).toLong
-    val preprocessMethod = args(4)
-    val numeofs = args(5).toInt
-    val outdest = args(6)
+    val maskpath = args(2)
+    val numrows = args(3).toInt
+    val numcols = args(4).toLong
+    val preprocessMethod = args(5)
+    val numeofs = args(6).toInt
+    val outdest = args(7)
 
-    val (mat, mean)= loadCSVClimateData(sc, matformat, inpath, numrows, numcols, preprocessMethod)
+    val (mat, mean)= loadCSVClimateData(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
 
     val (u, v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u, v)
     writeOut(outdest, climateEOFs, mean)
+
+    val approxvariance = climateEOFs.S.toArray.map(math.pow(_,2)).sum
+    report(s"Variance of low-rank approximation: $approxvariance")
+    val datavariance = mat.rows.map(x => x.vector.toArray.map(math.pow(_,2)).sum).sum
+    report(s"Data variance: $datavariance")
+    report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
+    report(s"S - ${climateEOFs.S.size}")
+    report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
+    val errorvariance = calcSSE(mat, climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]], 
+      diag(BDV(climateEOFs.S.toArray)) * climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]].t)
+    report(s"Error variance: $errorvariance")
+    report(s"$numeofs EOFs explain ${approxvariance/datavariance} of the variance with ${errorvariance/datavariance} relative error")
+  }
+
+  def calcSSE(mat: IndexedRowMatrix, lhsTall: BDM[Double], rhsFat: BDM[Double]) : Double = {
+      val sse = mat.rows.treeAggregate(BDV.zeros[Double](1))(
+        seqOp = (partial: BDV[Double], row: IndexedRow) => {
+          val reconstructed = (lhsTall(row.index.toInt, ::) * rhsFat).t
+          partial(0) += math.pow(norm(row.vector.toBreeze.asInstanceOf[BDV[Double]] - reconstructed), 2)
+          partial
+        },
+        combOp = (partial1, partial2) => partial1 += partial2,
+        depth = 2
+      )
+      sse(0)
   }
 
   def writeOut(outdest: String, eofs: EOFDecomposition, mean: BDV[Double]) {
@@ -89,27 +119,48 @@ object computeEOFs {
   }
 
   // For now, assume input is always csv and that rows are all observed, and that only mean centering is desired
-  def loadCSVClimateData(sc: SparkContext, matformat: String, inpath: String, numrows: Int, 
+  def loadCSVClimateData(sc: SparkContext, matformat: String, inpath: String, maskpath: String, numrows: Int, 
     numcols: Long, preprocessMethod: String) : Tuple2[IndexedRowMatrix, BDV[Double]] = {
-    var rows = sc.textFile(inpath).map(x => x.split(",")).
-      map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
-      groupByKey.map(x => new IndexedRow(x._1, new 
-        DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
-    rows.persist(StorageLevel.MEMORY_AND_DISK)
+    val rows = if ("maskpath" eq "notmasked") {
+        sc.textFile(inpath).map(x => x.split(",")).
+          map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
+          groupByKey.map(x => new IndexedRow(x._1, new 
+            DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
+    } else {
+      var omittedrows = sc.textFile(maskpath).map(x => x.split(",")).map(x => x(1).toInt).distinct().collect().sortBy(identity)
+      report(s"Loaded mask: omitting ${omittedrows.length} locations")
+      sc.textFile(inpath).map(x => x.split(",")).
+        map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
+        filter(x => Arrays.binarySearch(omittedrows, x._1) < 0).
+        groupByKey.map(x => new IndexedRow(x._1, new
+          DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
+    }
+    //rows.persist(StorageLevel.MEMORY_AND_DISK)
+    report("Loaded rows")
 
-    val distinctrowids = rows.map( x => x.index.toInt ).distinct().collect()
+    val distinctrowids = if (maskpath eq "notmasked") {
+      rows.map( x => x.index.toInt ).distinct().collect().sortBy(identity)
+    } else {
+      sc.textFile(maskpath).map(x => x.split(",")).map(x => (x(1).toInt, x(2).toInt)).
+        filter(x => x._2 < 1).map(x => x_.1).distinct().collect().sortBy(identity)
+    }
+    report(s"Got ${distinctrowids.length} unique IDs")
     def getrowid(i: Int) = Arrays.binarySearch(distinctrowids, i)
 
     val reindexedrows = rows.map(x => new IndexedRow(getrowid(x.index.toInt), x.vector))
     reindexedrows.persist(StorageLevel.MEMORY_AND_DISK)
+    report("Indexed rows")
     val mat = new IndexedRowMatrix(reindexedrows, numcols, numrows)
     val mean = getRowMeans(mat)
+    report("Computed mean")
     val centeredmat = subtractMean(mat, mean)
     centeredmat.rows.persist(StorageLevel.MEMORY_AND_DISK)
 
-    rows.unpersist()
-    mat.rows.unpersist()
+    reindexedrows.unpersist()
     centeredmat.rows.count()
+    report("Got centered matrix")
+    val squaredfrobnorm = centeredmat.rows.map(x => x.vector.toArray.map(x=>x*x).sum).reduce((a,b)=>a+b)
+    report(s"Squared Frobenius norm of centered matrix: $squaredfrobnorm")
 
     (centeredmat, mean)
   }
@@ -130,7 +181,7 @@ object computeEOFs {
 
   def convertLowRankFactorizationToEOFs(u : DenseMatrix, v : DenseMatrix) : EOFDecomposition = {
     val vBrz = v.toBreeze.asInstanceOf[BDM[Double]]
-    val vsvd = svd(vBrz)
+    val vsvd = svd.reduced(vBrz)
     EOFDecomposition(fromBreeze(u.toBreeze.asInstanceOf[BDM[Double]] * vsvd.U), new DenseVector(vsvd.S.data), fromBreeze(vsvd.Vt.t))
   }
 
@@ -140,12 +191,17 @@ object computeEOFs {
     val maxIter = 30
     val covOperator = ( v: BDV[Double] ) => multiplyCovarianceBy(mat, fromBreeze(v.toDenseMatrix).transpose).toBreeze.asInstanceOf[BDM[Double]].toDenseVector
     val (lambda, u) = EigenValueDecomposition.symmetricEigs(covOperator, mat.numCols.toInt, rank, tol, maxIter)
-    (fromBreeze(u), leftMultiplyBy(mat, fromBreeze(u.t)))
+    report(s"Square Frobenius norm of approximate row basis for data: ${u.data.map(x=>x*x).sum}")
+    val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
+    val qr.QR(q,r) = qr.reduced(Xlowrank)
+    report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
+    (fromBreeze(q), fromBreeze(r*u.t)) 
   }
 
   // computes BA where B is a local matrix and A is distributed: let b_i denote the
   // ith col of B and a_i denote the ith row of A, then BA = sum(b_i a_i)
   def leftMultiplyBy(mat: IndexedRowMatrix, lhs: DenseMatrix) : DenseMatrix = {
+   report(s"Left multiplying a ${mat.numRows}-by-${mat.numCols} matrix by a ${lhs.numRows}-by-${lhs.numCols} matrix")
    val lhsFactor = mat.rows.context.broadcast(lhs.toBreeze.asInstanceOf[BDM[Double]])
 
    val result =
@@ -161,9 +217,10 @@ object computeEOFs {
 
   // Returns `1/n * mat.transpose * mat * rhs`
   def multiplyCovarianceBy(mat: IndexedRowMatrix, rhs: DenseMatrix): DenseMatrix = {
+    report(s"Going to multiply the covariance operator of a ${mat.numRows}-by-${mat.numCols} matrix by a ${rhs.numRows}-by-${rhs.numCols} matrix")
     val rhsBrz = rhs.toBreeze.asInstanceOf[BDM[Double]]
     val result = 
-      mat.rows.treeAggregate(BDM.zeros[Double](rhs.numCols, mat.numCols.toInt))(
+      mat.rows.treeAggregate(BDM.zeros[Double](mat.numCols.toInt, rhs.numCols))(
         seqOp = (U: BDM[Double], row: IndexedRow) => {
           val rowBrz = row.vector.toBreeze.asInstanceOf[BDV[Double]]
           U += row.vector.toBreeze.asInstanceOf[BDV[Double]].asDenseMatrix.t * (row.vector.toBreeze.asInstanceOf[BDV[Double]].asDenseMatrix * rhs.toBreeze.asInstanceOf[BDM[Double]])
