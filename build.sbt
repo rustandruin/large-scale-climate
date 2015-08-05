@@ -9,7 +9,7 @@ val awssecretkey = System.getenv("AWS_SECRET_ACCESS_KEY")
 
 lazy val CSVToParquet = taskKey[Unit]("Convert CSV Data to Parquet")
 CSVToParquet <<= (assembly in Compile) map {
-  (jarFile: File) => s"src/runcsvtoparquet.sh ${jarFile} hdfs://master:9000/user/ubuntu/CSFROcsv hdfs://master:9000/user/ubuntu/CSFROParquet" !
+  (jarFile: File) => s"src/runcsvtoparquet.sh ${jarFile} "!
 }
 
 lazy val GRIBToCSV = taskKey[Unit]("Convert GRIB Data to Parquet")

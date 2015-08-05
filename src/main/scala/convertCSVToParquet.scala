@@ -9,24 +9,24 @@ import java.util.Arrays
 
 object CSVToParquet {
   def main(args: Array[String]) = {
-    val conf= new SparkConf().setAppName("CSV to Parquet convertor")
+    val conf= new SparkConf().setAppName("CSV to Parquet convertor").set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     val sc = new SparkContext(conf)
 
     convertCSVToScala(sc, args)
   }
 
   def convertCSVToScala(sc: SparkContext, args: Array[String]) = {
-    if(args.length != 2) {
-      Console.err.println("Expected args: inpath outpath") 
+    if(args.length != 3) {
+      Console.err.println("Expected args: inpath maskpath outpath") 
       System.exit(1)
     }
 
     val sqlctx = new org.apache.spark.sql.SQLContext(sc)
     import sqlctx.implicits._
 
-    val valsinpath = args(0) + "/vals"
-    val maskinpath = args(0) + "/mask"
-    val outpath = args(1)
+    val valsinpath = args(0)
+    val maskinpath = args(1) 
+    val outpath = args(2)
 
     // figure out which locations have missing observations so we can drop them
     val droprows: Array[Int] = sc.textFile(maskinpath).map(_.split(",")).map(x => x(1).toInt).distinct().collect

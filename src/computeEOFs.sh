@@ -17,8 +17,8 @@ JARNAME=$1
 NUMROWS=46718
 NUMCOLS=6349676
 FORMAT=csv
-INSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/vals
-MASKSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/mask/part-00000.gz
+INSOURCE=hdfs://ip-172-31-53-33.ec2.internal:9000/user/root/CSFROcsvfull/vals
+MASKSOURCE=hdfs://ip-172-31-53-33.ec2.internal:9000/user/root/CSFROcsvfull/mask.gz
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=20
@@ -29,9 +29,10 @@ LOGNAME="$JOBNAME.log"
 
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
+# Add back --master yarn \ when running yarn
 spark-submit --verbose \
-  --driver-memory 70G \
-  --executor-memory 70G \
+  --driver-memory 220G \
+  --executor-memory 220G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=50G \
