@@ -49,6 +49,7 @@ object computeEOFs {
     val conf = new SparkConf().setAppName("ClimateEOFs")
     conf.set("spark.task.maxFailures", "1")
     val sc = new SparkContext(conf)
+    sys.addShutdownHook( { sc.stop() } )
     appMain(sc, args)
   }
 
@@ -130,7 +131,7 @@ object computeEOFs {
 
     var rawrows = sc.textFile(inpath).map(x => x.split(",")).
       map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
-      repartition(sc.defaultParallelism * 6)
+      repartition(sc.defaultParallelism * 9)
       //filter(x => x._2._1 % 10 == 0).repartition(sc.defaultParallelism * 3)
 
     val rows = rawrows.filter(x => Arrays.binarySearch(omittedrows, x._1) < 0).
