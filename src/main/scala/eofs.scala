@@ -30,7 +30,7 @@ object computeEOFs {
     val now = Calendar.getInstance().getTime()
     val formatter = new SimpleDateFormat("H:m:s")
 
-    cols(verbose) {
+    if(verbose) {
       println("STATUS REPORT (" + formatter.format(now) + "): " + message)
     }
   }
@@ -62,7 +62,7 @@ object computeEOFs {
     val numeofs = args(6).toInt
     val outdest = args(7)
     
-    val (mat, mean, newnumcols) = loadCSVClimateDataSubset(sc, matformat, inpath, maskpath)
+    val (mat, mean, numnewrows) = loadCSVClimateDataSubset(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
     //val (mat, mean)= loadCSVClimateData(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
 
     val (u, v) = getLowRankFactorization(mat, numeofs)
@@ -123,20 +123,18 @@ object computeEOFs {
 
   // load a subset of the rows, and mean center, assume is masked
   def loadCSVClimateDataSubset(sc: SparkContext, matformat: String, inpath: String,
-    maskpath: String) : Tuple2[IndexedRowMatrix, BDV[Double], Int] = {
+    maskpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Tuple3[IndexedRowMatrix, BDV[Double], Int] = {
 
     var omittedrows = sc.textFile(maskpath).map(x => x.split(",")).map(x => x(1).toInt).distinct().collect().sortBy(identity)
     report(s"Loaded mask: omitting ${omittedrows.length} locations")
 
-    var rows = sc.textFile(inpath).map(x => x.split(",")).
+    var rawrows = sc.textFile(inpath).map(x => x.split(",")).
       map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
-      filter(x => x._2._1 % 100 == 0)
-    rows.persist(StorageLevel.MEMORY_AND_DISK_SER)
-    rows.count()
+      repartition(sc.defaultParallelism * 6)
+      //filter(x => x._2._1 % 10 == 0).repartition(sc.defaultParallelism * 3)
 
-    rows = rows.filter(x => Arrays.binarySearch(omittedrows, x._1) < 0).
-      groupByKey.map(x => new IndexedRow(x._1, new
-        DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
+    val rows = rawrows.filter(x => Arrays.binarySearch(omittedrows, x._1) < 0).
+      groupByKey.map(x => new IndexedRow(x._1, new DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
     rows.persist(StorageLevel.MEMORY_AND_DISK_SER)
     report("Loaded rows")
 
@@ -144,13 +142,13 @@ object computeEOFs {
     report(s"Got ${distinctrowids.length} unique IDs")
     def getrowid(i: Int) = Arrays.binarySearch(distinctrowids, i)
 
-    val numnewcols = rows.first().vector.toArray.length
+    val numnewrows = rows.first().vector.toArray.length
     val reindexedrows = rows.map(x => new IndexedRow(getrowid(x.index.toInt), x.vector))
     reindexedrows.persist(StorageLevel.MEMORY_AND_DISK_SER)
     report("Indexed rows")
     rows.unpersist()
 
-    val mat = new IndexedRowMatrix(reindexedrows, newnumcols, numrows)
+    val mat = new IndexedRowMatrix(reindexedrows, numcols, numnewrows)
     val mean = getRowMeans(mat)
     report("Computed mean")
     val centeredmat = subtractMean(mat, mean)
@@ -159,7 +157,7 @@ object computeEOFs {
 
     reindexedrows.unpersist()
     report("Got centered matrix")
-    (centeredmat, mean, newnumcols)
+    (centeredmat, mean, numnewrows)
   }
 
   // For now, assume input is always csv and that rows are all observed, and that only mean centering is desired
@@ -205,8 +203,9 @@ object computeEOFs {
   }
 
   def writeIndexedRowMatrix(mat: IndexedRowMatrix, path: String) = {
-    mat.rows.map(x => x.index.toString + "," + x.vector.mkString(",")).saveAsTextFile(path, classOf[DefaultCodec])
+    mat.rows.map(x => x.index.toString + "," + x.vector.toArray.mkString(",")).saveAsTextFile(path, classOf[DefaultCodec])
   }
+
   // returns a column vector of the means of each row
   def getRowMeans(mat: IndexedRowMatrix) : BDV[Double] = {
     val scaling = 1.0/mat.numCols
