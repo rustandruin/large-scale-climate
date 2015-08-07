@@ -1,6 +1,6 @@
-#!/usr/env python
+#!/usr/bin/env python
 # NB: if you write to local HDFS, ensure that the directories
-# "/user/ubuntu/CSFROcsv/vals" and "/user/ubuntu/CSFROcsv/mask" exist
+# "<userdir>/CFSROcsv/vals" and "<userdir>/CFSROcsv/recordDateMapping" exist
 #
 # This code converts a GRIB climate dataset stored on S3 to csv and either writes it to local HDFS or back to S3.
 # It can be run simultaneously in several processes on several machines, to facilitate processing large amounts of data,
@@ -25,22 +25,24 @@ import os, sys
 
 def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_flag = True, output_to_S3_flag = False):
 
+    tempdir = "/mnt3/ubuntu" # for r3.8xlarge instances, assumes this is linked to one of the SSDs
+    #tempdir = "/tmp" # for other instances
+
     conn = S3Connection(aws_key, aws_secret_key)
 
-    # source of the CSFR-O data, as a set of grb2 files
+    # source of the CFSRO-O data, as a set of grb2 files
     bucket = conn.get_bucket('agittens')
-    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06.gdas')
+    keys = bucket.list(prefix='CSFR-O/grib2/ocnh06.gdas') # should manually enforce a sorting on these so you know the explicit map between the record number and a particular sample observation
 
-    # make the vals and masks vectors global because they're huge, so don't want to reallocate them 
+    # make these vectors global because they're huge, so don't want to reallocate them 
     dimsperlevel = 360*720
     dims = dimsperlevel * 41
     vals = np.zeros((dims,))
-    mask = np.zeros((dims,))
-    runningmask = np.zeros((dims,)) # so we can track how much of each entry is missing, over the entire dataset
+    mask = np.zeros((dims,)) < 0
 
     # returns the set of gribs from an s3 key 
+    tempgribfname = tempdir + '/temp{0}'.format(myremainder)
     def get_grib_from_key(inkey):
-    	tempgribfname = '/mnt3/ubuntu/temp{0}'.format(myremainder)
         with open(tempgribfname, 'w') as fin:
             inkey.get_file(fin)
         return pygrib.open(tempgribfname.format(myremainder))
@@ -51,7 +53,7 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
     gribindices = list(reversed(gribindices))
 
     # for a given set of gribs, extracts the desired temperature observations and converts them to a vector of
-    # observations and a mask vector indicating which observations are missing
+    # observations and drops missing observations
     def converttovec(grbs):
 
         for index in range(41):
@@ -61,7 +63,7 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
             vals[index*dimsperlevel:(index+1)*dimsperlevel] = obs.reshape((dimsperlevel,))
             mask[index*dimsperlevel:(index+1)*dimsperlevel] = maskedobs.mask.reshape((dimsperlevel,))
             
-        return vals,mask
+        return vals[mask == False]
 
     # prints a given status message with a timestamp
     def report(status):
@@ -75,18 +77,22 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
         
     error_fh = open('grib_conversion_error_log_{0}_of_{1}'.format(myremainder, numprocesses), 'w')
 
+    recordDateMapping = {}
+    mappingfname = "CFSROcsv/recordDateMapping/part-" + format(myremainder, "05")
+    if compressed_flag:
+        mappingfname += ".gz"
+
     for (recordnum, inkey) in enumerate(keys):
         # only process records assigned to you
         if (recordnum % numprocesses) is not myremainder:
             continue
-        
+        recordDateMapping[recordnum] = inkey.name.split('.')[2]
+
         # choose the right name for the vector of observations and the vector of masks
         # depending on whether or not they're compressed
-        valsfname = "CSFROcsv/vals/part-"+format(recordnum,"05")
-        maskfname = "CSFROcsv/mask/part-"+format(recordnum,"05")
+        valsfname = "CFSROcsv/vals/part-"+format(recordnum,"05")
         if compressed_flag:
             valsfname += ".gz"
-            maskfname += ".gz"
             
         # avoid processing this set of observations if it has already been converted
         if output_to_S3_flag:
@@ -104,44 +110,53 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
             grbs = get_grib_from_key(inkey)
             report("Retrieved {0} from S3".format(inkey.name))
         
-            (vals, mask) = converttovec(grbs)
-            report("Converted {0} to numpy arrays".format(inkey.name))
+            observations = converttovec(grbs)
+            report("Converted {0} to a numpy array of observations".format(inkey.name))
         
-            tempvalsfname = '/mnt3/ubuntu/tempvals{0}'.format(myremainder)
-            tempmaskfname = '/mnt3/ubuntu/tempmask{0}'.format(myremainder)
+            tempvalsfname = tempdir + '/tempvals{0}'.format(myremainder)
             with myopen(tempvalsfname, 'w') as valsfout:
-                with myopen(tempmaskfname, 'w') as maskfout:
-                    for index in range(0, vals.shape[0]):
-                        valsfout.write("{0},{1},{2}\n".format(recordnum, index, vals[index]))
-                        if (mask[index] > 0):
-                            maskfout.write("{0},{1},{2}\n".format(recordnum, index, mask[index]))
-            report("Wrote numpy arrays to local files")
+	        for index in range(0, observations.shape[0]):
+		    valsfout.write("{0},{1},{2}\n".format(recordnum, index, observations[index]))
+            report("Wrote numpy array to a local file")
             
             if output_to_S3_flag:
                 valsoutkey = Key(bucket)
                 valsoutkey.key = valsfname
                 valsoutkey.set_contents_from_filename(tempvalsfname)
-                maskoutkey = Key(bucket)
-                maskoutkey.key = maskfname
-                maskoutkey.set_contents_from_filename(tempmaskfname)
-                report("Wrote {0} to {1} and {2} on S3".format(inkey.name, valsfname, maskfname))
+                report("Wrote {0} to {1} on S3".format(inkey.name.split('.')[2], valsfname))
             else:
                 hdfs.put(tempvalsfname, valsfname)
-                hdfs.put(tempmaskfname, maskfname)
-                report("Wrote {0} to {1} and {2} on HDFS".format(inkey.name, valsfname, maskfname))
-	    os.remove(tempvalsfname)
-            os.remove(tempmaskfname)
+                report("Wrote {0} to {1} on HDFS".format(inkey.name.split('.')[2], valsfname))
         except:
             report("Skipping record {0}! An error occurred processing {1}".format(recordnum, inkey.name))
             error_fh.write("Skipped {1}, record {0}\n".format(inkey.name, recordnum))
             
-    error_fh.close()
     try:
-        os.remove('temp{0}'.format(myremainder))
+        os.remove(tempgribfname)
         os.remove(tempvalsfname)
-        os.remove(tempmaskfname)
+
+        # write the record mapping out to file so we know which rows correspond to which date
+    	temprecordfname = tempdir + '/temp{0}recordmapping'.format(myremainder)
+        with myopen(temprecordfname, 'w') as fout:
+            for recordnum, keyname in recordDateMapping.iteritems():
+                fout.write("{0},{1}\n".format(recordnum, keyname))
+        report("Wrote the observation date to row number mapping for process {0} to local file".format(myremainder))
+             
+        if output_to_S3_flag:
+            mappingoutkey = Key(bucket)
+            mappingoutkey.key = mappingfname
+            mappingoutkey.set_contents_from_filename(temprecordfname)
+            report("Wrote record mapping for {0} to {1} on S3".format(myremainder, mappingfname))
+        else:
+            hdfs.put(temprecordfname, mappingfname)
+            report("Wrote record mapping for {0} to {1} on HDFS".format(myremainder, mappingfname))
+
+        os.remove(temprecordfname)
     except:
-        pass
+        report("Skipping writing the record mapping for {0}! An error occurred writing it out.".format(myremainder))
+        error_fh.write("Skipping writing the record mapping for {0}! An error occurred writing it out.\n".format(myremainder))
+
+    error_fh.close()
 
 if __name__ == "__main__":
     convertGRIBs(sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))

@@ -5,9 +5,10 @@ import java.io.{DataInputStream, FileInputStream, FileWriter, File}
 object ConvertDump { 
 
   type DM = DenseMatrix[Double]
-  type DV = DenseVector[Double]
+  type DDV = DenseVector[Double]
+  type DIV = DenseVector[Int]
 
-  def loadVector( inf: DataInputStream) : DV = {
+  def loadDoubleVector( inf: DataInputStream) : DDV = {
     val len = inf.readInt()
     val v = DenseVector.zeros[Double](len)
     for (i <- 0 until len) {
@@ -16,6 +17,15 @@ object ConvertDump {
     v
   }
   
+  def loadIntVector( inf: DataInputStream) : DIV = {
+    val len = inf.readInt()
+    val v = DenseVector.zeros[Int](len)
+    for (i <- 0 until len) {
+      v(i) = inf.readInt()
+    }
+    v
+  }
+
   def loadMatrix( inf: DataInputStream) : DM = {
     val (r,c) = Tuple2(inf.readInt(), inf.readInt())
     val m = DenseMatrix.zeros[Double](r,c)
@@ -25,19 +35,20 @@ object ConvertDump {
     m 
   }
 
-  def loadDump(infname: String) : Tuple3[DM, DM, DV] = {
+  def loadDump(infname: String) : Tuple4[DM, DM, DDV, DIV] = {
 
     val inf = new DataInputStream( new FileInputStream(infname))
 
     val eofsU = loadMatrix(inf)
     val eofsV = loadMatrix(inf)
-    val mean = loadVector(inf)
+    val mean = loadDoubleVector(inf)
+    val rowindices = loadIntVector(inf)
 
     inf.close()
-    (eofsU, eofsV, mean)
+    (eofsU, eofsV, mean, rowindices)
   }
 
-  def writeMatrix(mat: DM, fn: String) = {
+  def writeDoubleMatrix(mat: DM, fn: String) = {
     val writer = new FileWriter(new File(fn))
     writer.write("%%MatrixMarket matrix coordinate real general\n")
     writer.write(s"${mat.rows} ${mat.cols} ${mat.rows*mat.cols}\n")
@@ -49,10 +60,24 @@ object ConvertDump {
     writer.close
   }
 
+  def writeIntVector(vec: DIV, fn: String) = {
+    val mat = vec.asDenseMatrix
+    val writer = new FileWriter(new File(fn))
+    writer.write("%%MatrixMarket matrix coordinate real general\n")
+    writer.write(s"${mat.rows} ${mat.cols} ${mat.rows*mat.cols}\n")
+    for(i <- 0 until mat.rows) {
+      for(j <- 0 until mat.cols) {
+        writer.write(s"${i+1} ${j+1} ${mat(i, j)}\n")
+      }
+    }
+    writer.close
+  }
+
   def main(args: Array[String]) {
-    val (eofsU, eofsV, mean) = loadDump(args(0))
-    writeMatrix(eofsU, s"${args(1)}/colEOFs")
-    writeMatrix(eofsV, s"${args(1)}/rowEOFs")
-    writeMatrix(mean.asDenseMatrix, s"${args(1)}/rowMeans")
+    val (eofsU, eofsV, mean, rowindices) = loadDump(args(0))
+    writeDoubleMatrix(eofsU, s"${args(1)}/colEOFs")
+    writeDoubleMatrix(eofsV, s"${args(1)}/rowEOFs")
+    writeDoubleMatrix(mean.asDenseMatrix, s"${args(1)}/rowMeans")
+    writeIntVector(rowindices, s"${args(1)}/rowindices")
   }
 }
