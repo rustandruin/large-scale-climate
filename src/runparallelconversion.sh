@@ -21,8 +21,8 @@ AWS_KEY=$1
 AWS_SECRET_KEY=$2
 
 #TODO: check these don't exist before running
-/usr/local/hadoop/bin/hdfs dfs -mkdir -p /user/ubuntu/CSFROcsv/vals
-/usr/local/hadoop/bin/hdfs dfs -mkdir /user/ubuntu/CSFROcsv/mask
+/usr/local/hadoop/bin/hdfs dfs -mkdir -p /user/ubuntu/CFSROcsv/vals
+/usr/local/hadoop/bin/hdfs dfs -mkdir /user/ubuntu/CFSROcsv/recordDateMapping
 
 cd $CURDIR
 while [ $MYREMAINDER -lt $MASTERPROCESSES ]; do

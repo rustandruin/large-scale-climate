@@ -16,8 +16,8 @@ object CSVToParquet {
   }
 
   def convertCSVToScala(sc: SparkContext, args: Array[String]) = {
-    if(args.length != 3) {
-      Console.err.println("Expected args: inpath maskpath outpath") 
+    if(args.length != 2) {
+      Console.err.println("Expected args: inpath outpath") 
       System.exit(1)
     }
 
@@ -25,31 +25,14 @@ object CSVToParquet {
     import sqlctx.implicits._
 
     val valsinpath = args(0)
-    val maskinpath = args(1) 
-    val outpath = args(2)
+    val outpath = args(1)
 
-    // figure out which locations have missing observations so we can drop them
-    val droprows: Array[Int] = sc.textFile(maskinpath).map(_.split(",")).map(x => x(1).toInt).distinct().collect
-    val valsrows = sc.textFile(valsinpath).map(_.split(",")).map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).filter(x => !droprows.contains(x._1)).groupByKey.map(x => (x._1, x._2.toSeq.sortBy(_._1)))
-    valsrows.persist(StorageLevel.MEMORY_AND_DISK_SER)
-
-    val valsrowtabRdd = valsrows.keys.distinct(100).sortBy(identity)
-    valsrowtabRdd.persist(StorageLevel.MEMORY_AND_DISK)
-    valsrowtabRdd.saveAsTextFile(args(1) + "/valsrowtab.txt")
-
-    val coltabRdd = valsrows.values.flatMap(_.map(_._1)).distinct(100).sortBy(identity)
-    coltabRdd.persist(StorageLevel.MEMORY_AND_DISK)
-    coltabRdd.saveAsTextFile(args(1) + "/coltab.txt")
-
-    val valsrowtab: Array[Int] = valsrowtabRdd.collect
-    val coltab: Array[Int] = coltabRdd.collect
-    def valsrowid(i: Int) = Arrays.binarySearch(valsrowtab, i)
-    def colid(i: Int) = Arrays.binarySearch(coltab, i)
+    val valsrows = sc.textFile(valsinpath).map(_.split(",")).map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).groupByKey.map(x => (x._1, x._2.toSeq.sortBy(_._1)))
 
     val newValsRows = valsrows.map(x => {
       val values = x._2.map(y => y._2).toArray
-      new IndexedRow(valsrowid(x._1), new DenseVector(values))
+      new IndexedRow(x._1, new DenseVector(values))
     }).toDF
-    newValsRows.saveAsParquetFile(outpath + "/vals.parquet")
+    newValsRows.saveAsParquetFile(outpath)
   }
 }
