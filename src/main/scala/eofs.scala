@@ -63,12 +63,12 @@ object computeEOFs {
     val numeofs = args(6).toInt
     val outdest = args(7)
     
-    val (mat, mean, numnewrows) = loadCSVClimateDataSubset(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
+    val (mat, mean, rowindices, numnewrows) = loadCSVClimateDataSubset(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
     //val (mat, mean)= loadCSVClimateData(sc, matformat, inpath, maskpath, numrows, numcols, preprocessMethod)
 
     val (u, v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u, v)
-    writeOut(outdest, climateEOFs, mean)
+    writeOut(outdest, climateEOFs, mean, rowindices)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
@@ -97,18 +97,26 @@ object computeEOFs {
       sse(0)
   }
 
-  def writeOut(outdest: String, eofs: EOFDecomposition, mean: BDV[Double]) {
+  def writeOut(outdest: String, eofs: EOFDecomposition, mean: BDV[Double], rowindices: BDV[Int]) {
     val outf = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(new File(outdest))))
     dumpMat(outf, eofs.U.toBreeze.asInstanceOf[BDM[Double]])
     dumpMat(outf, eofs.V.toBreeze.asInstanceOf[BDM[Double]])
     dumpV(outf, eofs.S.toBreeze.asInstanceOf[BDV[Double]])
     dumpV(outf, mean)
+    dumpVI(outf, rowindices)
   }
 
   def dumpV(outf: DataOutputStream, v: BDV[Double]) = {
     outf.writeInt(v.length) 
     for(i <- 0 until v.length) {
       outf.writeDouble(v(i))
+    }
+  }
+
+  def dumpVI(outf: DataOutputStream, v: BDV[Int]) = {
+    outf.writeInt(v.length) 
+    for(i <- 0 until v.length) {
+      outf.writeInt(v(i))
     }
   }
 
@@ -124,15 +132,16 @@ object computeEOFs {
 
   // load a subset of the rows, and mean center, assume is masked
   def loadCSVClimateDataSubset(sc: SparkContext, matformat: String, inpath: String,
-    maskpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Tuple3[IndexedRowMatrix, BDV[Double], Int] = {
+    maskpath: String, numrows: Int, numcols: Long, preprocessMethod: String) :
+  Tuple4[IndexedRowMatrix, BDV[Double], BDV[Int], Int] = {
 
     var omittedrows = sc.textFile(maskpath).map(x => x.split(",")).map(x => x(1).toInt).distinct().collect().sortBy(identity)
     report(s"Loaded mask: omitting ${omittedrows.length} locations")
 
     var rawrows = sc.textFile(inpath).map(x => x.split(",")).
       map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
-      repartition(sc.defaultParallelism * 9)
-      //filter(x => x._2._1 % 10 == 0).repartition(sc.defaultParallelism * 3)
+      filter(x => x._2._1 % 10 == 0).repartition(sc.defaultParallelism * 3)
+      //repartition(sc.defaultParallelism * 9)
 
     val rows = rawrows.filter(x => Arrays.binarySearch(omittedrows, x._1) < 0).
       groupByKey.map(x => new IndexedRow(x._1, new DenseVector(x._2.toSeq.sortBy(_._1).map(_._2).toArray)))
@@ -158,7 +167,7 @@ object computeEOFs {
 
     reindexedrows.unpersist()
     report("Got centered matrix")
-    (centeredmat, mean, numnewrows)
+    (centeredmat, mean, BDV[Int](distinctrowids), numnewrows)
   }
 
   // For now, assume input is always csv and that rows are all observed, and that only mean centering is desired

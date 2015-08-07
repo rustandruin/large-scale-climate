@@ -38,6 +38,7 @@ spark-submit --verbose \
   --conf spark.driver.maxResultSize=50G \
   --conf spark.task.maxFailures=4 \
   --conf spark.worker.timeout=240 \
+  --conf spark.network.timeout=360 \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
