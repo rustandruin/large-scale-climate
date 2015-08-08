@@ -12,7 +12,7 @@ CSVToParquet <<= (assembly in Compile) map {
   (jarFile: File) => s"src/runcsvtoparquet.sh ${jarFile} "!
 }
 
-lazy val GRIBToCSV = taskKey[Unit]("Convert GRIB Data to Parquet")
+lazy val GRIBToCSV = taskKey[Unit]("Convert GRIB Data to CSV")
 GRIBToCSV <<= (assembly in Compile) map {
   (jarFile: File) => s"src/runparallelconversion.sh ${awskey} ${awssecretkey}" !
 }

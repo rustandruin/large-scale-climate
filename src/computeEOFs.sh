@@ -14,7 +14,7 @@ JARNAME=$1
 #MASKSOURCE='notmasked'
 #MASKSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/mask/part-00000.gz
 # for the large dataset
-NUMROWS=46718
+NUMROWS=46715
 NUMCOLS=6349676
 FORMAT=csv
 INSOURCE=hdfs://ip-172-31-53-33.ec2.internal:9000/user/root/CSFROcsvfull/vals
