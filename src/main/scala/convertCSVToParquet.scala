@@ -28,24 +28,16 @@ object CSVToParquet {
     val valsinpath = args(0)
     val outpath = args(1)
 
-    val valsrows = sc.textFile(valsinpath).repartition(sc.defaultParallelism * 3).
-                      map(_.split(",")).map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
+    val valsrows = sc.textFile(valsinpath).repartition(2880).map(_.split(",")).map(x => (x(1).toInt, (x(0).toInt, x(2).toDouble))).
                       groupByKey.map(x => (x._1, x._2.toSeq.sortBy(_._1)))
-    valsrows.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
-    /* 
-     need to remap the column values (i.e. observation time indices) because
-     the columns corresponding to records skipped during the processing of the
-     GRIBs into CSV are missing
-    */
-    val uniqcols = valsrows.flatMap(x => x._2.map(pair => pair._1)).distinct().
-                     collect().sortBy(identity)
-    def colid( origcolidx: Int) : Int = Arrays.binarySearch(uniqcols, origcolidx) 
-    sc.parallelize(uniqcols).coalesce(1).saveAsTextFile(outpath + "/origcolindices")
+    /* now the records look like (rownum, ( (colnum1, val1) , ... (colnumn, valn))), where the rownums correspond to the about 6 million observation locations and the colnums correspond to the about 46K observation times. Note that the colnums are in increasing order (corresponding to increasing date), but some dates were skipped due to corrupted data, so we should store precisely what these colnums are to facilitate mapping the EOFs back onto the correct times */
+    val colordering = sc.textFile(valsinpath).repartition(2880).map(_.split(",")).map(_(0).toInt).distinct().sortBy(identity).collect()
+    sc.parallelize(colordering).coalesce(1).saveAsTextFile(outpath + "/origcolindices")
 
     val newValsRows = valsrows.map(x => {
       val values = x._2.map(y => y._2).toArray
-      new IndexedRow(colid(x._1), new DenseVector(values))
+      new IndexedRow(x._1, new DenseVector(values))
     }).toDF
 
     newValsRows.saveAsParquetFile(outpath + "/mat.parquet")

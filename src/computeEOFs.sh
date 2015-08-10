@@ -16,9 +16,7 @@ JARNAME=$1
 # for the large dataset
 NUMROWS=46715
 NUMCOLS=6349676
-FORMAT=csv
-INSOURCE=hdfs://ip-172-31-53-33.ec2.internal:9000/user/root/CSFROcsvfull/vals
-MASKSOURCE=hdfs://ip-172-31-53-33.ec2.internal:9000/user/root/CSFROcsvfull/mask.gz
+INSOURCE=hdfs://ip-172-31-3-93.ec2.internal:9000/user/root/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=20
@@ -37,10 +35,10 @@ spark-submit --verbose \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=50G \
   --conf spark.task.maxFailures=4 \
-  --conf spark.worker.timeout=240 \
-  --conf spark.network.timeout=360 \
+  --conf spark.worker.timeout=1200000 \
+  --conf spark.network.timeout=1200000 \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
-  $FORMAT $INSOURCE $MASKSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST \
+  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST \
   2>&1 | tee $LOGNAME
