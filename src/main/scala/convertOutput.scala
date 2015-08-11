@@ -35,17 +35,17 @@ object ConvertDump {
     m 
   }
 
-  def loadDump(infname: String) : Tuple4[DM, DM, DDV, DIV] = {
+  def loadDump(infname: String) : Tuple4[DM, DM, DDV, DDV] = {
 
     val inf = new DataInputStream( new FileInputStream(infname))
 
     val eofsU = loadMatrix(inf)
     val eofsV = loadMatrix(inf)
+    val evals = loadDoubleVector(inf)
     val mean = loadDoubleVector(inf)
-    val rowindices = loadIntVector(inf)
 
     inf.close()
-    (eofsU, eofsV, mean, rowindices)
+    (eofsU, eofsV, evals, mean)
   }
 
   def writeDoubleMatrix(mat: DM, fn: String) = {
@@ -74,10 +74,10 @@ object ConvertDump {
   }
 
   def main(args: Array[String]) {
-    val (eofsU, eofsV, mean, rowindices) = loadDump(args(0))
+    val (eofsU, eofsV, eofsS, mean) = loadDump(args(0))
     writeDoubleMatrix(eofsU, s"${args(1)}/colEOFs")
     writeDoubleMatrix(eofsV, s"${args(1)}/rowEOFs")
+    writeDoubleMatrix(eofsS.asDenseMatrix, s"${args(1)}/evalEOFs")
     writeDoubleMatrix(mean.asDenseMatrix, s"${args(1)}/rowMeans")
-    writeIntVector(rowindices, s"${args(1)}/rowindices")
   }
 }
