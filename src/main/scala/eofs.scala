@@ -123,6 +123,7 @@ object computeEOFs {
     dumpMat(outf, eofs.V.toBreeze.asInstanceOf[BDM[Double]])
     dumpV(outf, eofs.S.toBreeze.asInstanceOf[BDV[Double]])
     dumpV(outf, mean)
+    outf.close()
   }
 
   def dumpV(outf: DataOutputStream, v: BDV[Double]) = {
