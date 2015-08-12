@@ -93,13 +93,13 @@ object computeEOFs {
       }
     }.coalesce(2880)
 
-    rows.cache()
+    //rows.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
     val mean = getRowMeans(tempmat)
     val centeredmat = subtractMean(tempmat, mean)
-    centeredmat.rows.cache()
+    centeredmat.rows.persist(StorageLevel.MEMORY_AND_DISK_SER)
     centeredmat.rows.count()
-    rows.unpersist()
+    //rows.unpersist()
 
     (centeredmat, mean)
   }

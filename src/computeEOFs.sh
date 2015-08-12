@@ -16,7 +16,7 @@ JARNAME=$1
 # for the large dataset
 NUMROWS=46715
 NUMCOLS=6349676
-INSOURCE=hdfs://ip-172-31-3-93.ec2.internal:9000/user/root/CFSROparquet
+INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=20
@@ -28,6 +28,7 @@ LOGNAME="$JOBNAME.log"
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
 # Add back --master yarn \ when running yarn
+  # --num-executors 29 \
 spark-submit --verbose \
   --driver-memory 220G \
   --executor-memory 220G \
