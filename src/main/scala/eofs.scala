@@ -155,6 +155,7 @@ object computeEOFs {
     val scaling = 1.0/mat.numCols
     val mean = BDV.zeros[Double](mat.numRows.toInt)
     val meanpairs = mat.rows.map( x => (x.index, scaling * x.vector.toArray.sum)).collect()
+    report(s"Computed ${meanpairs.length} row means (presumably nonzero)")
     meanpairs.foreach(x => mean(x._1.toInt) = x._2)
     mean
   }

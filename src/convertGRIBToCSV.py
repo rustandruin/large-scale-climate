@@ -58,9 +58,7 @@ def convertGRIBs(aws_key, aws_secret_key, numprocesses, myremainder, compressed_
 
         for index in range(41):
             maskedobs = grbs[gribindices[index]].data()[0]
-            obs = maskedobs.data
-            obs[maskedobs.mask] = 0
-            vals[index*dimsperlevel:(index+1)*dimsperlevel] = obs.reshape((dimsperlevel,))
+            vals[index*dimsperlevel:(index+1)*dimsperlevel] = maskedobs.data.reshape((dimsperlevel,))
             mask[index*dimsperlevel:(index+1)*dimsperlevel] = maskedobs.mask.reshape((dimsperlevel,))
             
         return vals[mask == False]
