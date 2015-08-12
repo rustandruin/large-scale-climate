@@ -2,8 +2,8 @@
 CURDIR=`dirname $(realpath $0)`
 LOGDIR=$CURDIR/../eventLogs
 JARNAME=$1
-INSOURCE=hdfs://ip-172-31-3-93.ec2.internal:9000/user/root/CFSROcsv/vals
-OUTDEST=hdfs://ip-172-31-3-93.ec2.internal:9000/user/root/CFSROparquet
+INSOURCE=hdfs://`hostname`:9000/user/root/CFSROcsv/vals
+OUTDEST=hdfs://`hostname`:9000/user/root/CFSROparquet
 LOGNAME=$CURDIR/../CSVToParquetConversion.log
 
 # add back --master yarn \ if using yarn
