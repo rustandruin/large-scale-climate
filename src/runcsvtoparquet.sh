@@ -17,7 +17,7 @@ spark-submit --verbose \
   --conf spark.worker.timeout=1200000 \
   --conf spark.network.timeout=1200000 \
 	--jars $JARNAME \
-	--class org.apache.spark.climate.CSVToParquet \
+	--class org.apache.spark.climate.CSVToParquetPiecewise \
 	$JARNAME \
 	$INSOURCE $OUTDEST \
 	2>&1 | tee $LOGNAME
