@@ -16,7 +16,7 @@ JARNAME=$1
 # for the large dataset
 NUMROWS=46715
 NUMCOLS=6349676
-INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
+INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=20
@@ -30,8 +30,10 @@ LOGNAME="$JOBNAME.log"
 # Add back --master yarn \ when running yarn
   # --num-executors 29 \
 spark-submit --verbose \
-  --driver-memory 220G \
-  --executor-memory 220G \
+  --master yarn \
+  --num-executors 29 \
+  --driver-memory 180G \
+  --executor-memory 180G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=50G \

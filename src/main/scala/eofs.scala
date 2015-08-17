@@ -87,7 +87,7 @@ object computeEOFs {
     import sqlctx.implicits._
 
     val rows = {
-      sqlctx.parquetFile(inpath + "/mat.parquet").rdd.map {
+      sqlctx.parquetFile(inpath + "/finalmat.parquet").rdd.map {
         case SQLRow(index: Long, vector: Vector) =>
           new IndexedRow(index, vector)
       }
