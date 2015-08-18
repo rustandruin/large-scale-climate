@@ -5,12 +5,7 @@ CURDIR=`dirname $(realpath $0)`
 WORKINGDIR=$CURDIR/..
 JARFILE=$1
 SPARKHOME=/opt/Spark
-SPARKHOME=/root/spark
-SPARKHOME=/root/spark
-SPARKHOME=/root/spark
-SPARKHOME=/root/spark
-SPARKHOME=/root/spark
-SPARKHOME=/root/spark
+#SPARKHOME=/root/spark
 
 INBIN=$WORKINGDIR/data/eofs-centerOverAllObservations-20.bin
 OUTCSV=$WORKINGDIR/data
@@ -23,3 +18,9 @@ $SPARKHOME/bin/spark-submit --master local --verbose \
    --driver-memory 2G \
    --class org.apache.spark.mllib.linalg.distributed.ConvertDump \
    $JARFILE $INBIN $OUTCSV
+
+hdfs dfs -get $ROWINDICES_HDFS $OUTCSV
+cd $OUTCSV/recordDateMapping
+gunzip *
+cat part* > ../csvrow-to-gribdate-mapping
+hdfs dfs -get $COLINDICES_HDFS ../parquetcol-to-csvrow-mapping
