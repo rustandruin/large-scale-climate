@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Converts the binary dump of the EOFs and the data on row and column indices into a nice numpy dataset
+# TODO: get the colindices and row indices from S3
 
 CURDIR=`dirname $(realpath $0)`
 WORKINGDIR=$CURDIR/..
