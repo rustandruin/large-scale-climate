@@ -14,6 +14,7 @@ import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.sql.{SQLContext, Row => SQLRow}
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Axis, qr, svd, sum, SparseVector => BSV}
 import breeze.linalg.{norm, diag, accumulate, rank => BrzRank}
+import breeze.linalg.{min, argmin}
 import breeze.stats.meanAndVariance
 import breeze.numerics.{sqrt => BrzSqrt}
 import math.{ceil, log}
@@ -186,6 +187,11 @@ object computeEOFs {
     val meanstdpairs = mat.rows.map( x => (x.index, meanAndVariance(x.vector.toBreeze.asInstanceOf[BDV[Double]])) ).collect()
     //report(s"Computed ${meanstdpairs.length} row means and stdvs (presumably nonzero)")
     meanstdpairs.foreach( x => { mean(x._1.toInt) = x._2.mean; std(x._1.toInt) = x._2.stdDev })
+    val stdtol = .0001
+    val badpairs = std.toArray.zipWithIndex.filter(x => x._1 < stdtol)
+    report(s"Indices of rows with too low standard deviation, and the standard deviations: ${badpairs}")
+    report(s"Replacing those bad standard deviations with 1s")
+    badpairs.foreach(x => std(x._2) = 1)
     (mean, std)
   }
 
