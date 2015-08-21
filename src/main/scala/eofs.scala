@@ -107,7 +107,7 @@ object computeEOFs {
       //rows.unpersist()
 
       (centeredmat, mean)
-    }else if ("standardize" == preprocessMethod) {
+    }else if ("standardizeEach" == preprocessMethod) {
       val (mean, stdv) = getRowMeansAndStd(tempmat)
       val standardizedmat = standardize(tempmat, mean, stdv)
       standardizedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -115,9 +115,31 @@ object computeEOFs {
       //rows.unpersist()
 
       (standardizedmat, mean, stdv)
-    }else {
+    }else if ("cosLat+centerOverAllObservations" == preprocessMethod) {
+      val mean = getRowMeans(tempmat)
+      val centeredmat = subtractMean(tempmat, mean)
+
+      val latitudeweights = BDV.zeros[Double](tempmat.numCols.toInt)
+      sc.textFile(inpath + "/latitudeweights").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
+
+      val reweightedmat = areaWeight(centeredmat, latitudeweights)
+      reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      reweightedmat.rows.count()
+      //rows.unpersist()
+
+      (reweightedmat, areaWeight(mean, latitudeweights))
+    } else {
       None
     }
+  }
+
+  def areaWeight(mat: IndexedRowMatrix, weights: BDV[Double]) : IndexedRowMatrix = {
+    val reweightedrows = mat.rows.map(x => new IndexedRow(x.index, new DenseVector((x.vector.toBreeze.asInstanceOf[BDV[Double]] :* weights).toArray)) )
+    new IndexedRowMatrix(reweightedrows, mat.numRows, mat.numCols.toInt)
+  }
+
+  def areaWeight(vec: BDV[Double], weights: BDV[Double]) : BDV[Double] = {
+    vec :* weights
   }
 
   def calcSSE(mat: IndexedRowMatrix, lhsTall: BDM[Double], rhsFat: BDM[Double]) : Double = {
@@ -128,7 +150,7 @@ object computeEOFs {
           partial
         },
         combOp = (partial1, partial2) => partial1 += partial2,
-        depth = 3
+        depth = 5
       )
       sse(0)
   }

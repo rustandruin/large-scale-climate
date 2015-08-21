@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Computes the 3D EOFs using CSFR-O dataset
+# Computes the 3D EOFs using CSFR dataset
 
 DIR="$(cd "`dirname "$0"`"/..; pwd)"
 LOGDIR="$DIR/eventLogs"
@@ -19,7 +19,11 @@ NUMCOLS=6349676
 #INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
 INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
 
-PREPROCESS="standardize"
+PREPROCESS="centerOverAllObservations"
+PREPROCESS="cosLat+centerOverAllObservations"
+PREPROCESS="standardizeEach"
+PREPROCESS="standardizeLevels"
+PREPROCESS="cosLat+standardizeLevels"
 NUMEOFS=20
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
