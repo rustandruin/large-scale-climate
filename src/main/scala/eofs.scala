@@ -189,7 +189,9 @@ object computeEOFs {
     meanstdpairs.foreach( x => { mean(x._1.toInt) = x._2.mean; std(x._1.toInt) = x._2.stdDev })
     val stdtol = .0001
     val badpairs = std.toArray.zipWithIndex.filter(x => x._1 < stdtol)
-    report(s"Indices of rows with too low standard deviation, and the standard deviations: ${badpairs}")
+    report(s"Indices of rows with too low standard deviation, and the standard deviations (there are ${badpairs.length} such rows):")
+    report(s"${badpairs.map(x => x._2).foldLeft("")( (x, y) => x + " " + y.toString )}")
+    badpairs foreach { case(badstd, idx) => report(s"(${idx}, ${badstd})") }
     report(s"Replacing those bad standard deviations with 1s")
     badpairs.foreach(x => std(x._2) = 1)
     (mean, std)
