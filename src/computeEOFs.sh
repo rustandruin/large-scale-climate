@@ -16,9 +16,10 @@ JARNAME=$1
 # for the large dataset
 NUMROWS=46715
 NUMCOLS=6349676
-INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
+#INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
+INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
 
-PREPROCESS="centerOverAllObservations"
+PREPROCESS="standardize"
 NUMEOFS=20
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
@@ -29,14 +30,15 @@ LOGNAME="$JOBNAME.log"
 
 # Add back --master yarn \ when running yarn
   # --num-executors 29 \
+  # took memory down from 180G on starcluster/yarn
+# added multiple executors vs 29 on starcluster/yarn
 spark-submit --verbose \
-  --master yarn \
-  --num-executors 29 \
-  --driver-memory 180G \
-  --executor-memory 180G \
+  --num-executors 30 \
+  --driver-memory 220G \
+  --executor-memory 220G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
-  --conf spark.driver.maxResultSize=50G \
+  --conf spark.driver.maxResultSize=30G \
   --conf spark.task.maxFailures=4 \
   --conf spark.worker.timeout=1200000 \
   --conf spark.network.timeout=1200000 \

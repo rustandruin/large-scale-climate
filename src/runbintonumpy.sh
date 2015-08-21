@@ -8,7 +8,8 @@ JARFILE=$1
 SPARKHOME=/opt/Spark
 #SPARKHOME=/root/spark
 
-INBIN=$WORKINGDIR/data/eofs-centerOverAllObservations-20.bin
+#INBIN=$WORKINGDIR/data/eofs-centerOverAllObservations-20.bin
+INBIN=$WORKINGDIR/data/eofs-standardize-20.bin
 OUTCSV=$WORKINGDIR/data
 OUTNUMPY=$OUTCSV
 COLINDICES_HDFS=/user/ubuntu/CFSROparquet/origcolindices # the mapping from col indices in the eofs to the hourly observation periods as columns
