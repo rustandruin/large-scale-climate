@@ -21,10 +21,13 @@ import math.{ceil, log}
 import scala.collection.mutable.ArrayBuffer
 
 import java.util.Arrays
-import java.io.{DataOutputStream, BufferedOutputStream, FileOutputStream, File}
+import java.io.FileOutputStream
+import java.util.zip.GZIPOutputStream
 import java.util.Calendar
 import java.text.SimpleDateFormat
 import org.apache.hadoop.io.compress.DefaultCodec
+
+import org.msgpack.MessagePack;
 
 object computeEOFs {
 
@@ -85,6 +88,8 @@ object computeEOFs {
 
   }
 
+  // returns the processed matrix as well as a Product containing the information relevant to that processing:
+  //
   def loadParquetClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
 
     val sqlctx = new org.apache.spark.sql.SQLContext(sc)
@@ -155,40 +160,23 @@ object computeEOFs {
       sse(0)
   }
 
+  // a la https://gist.github.com/thiagozs/6699612
   def writeOut(outdest: String, eofs: EOFDecomposition, info: Product) {
-    val outf = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(new File(outdest))))
-    dumpMat(outf, eofs.U.toBreeze.asInstanceOf[BDM[Double]])
-    dumpMat(outf, eofs.V.toBreeze.asInstanceOf[BDM[Double]])
-    dumpV(outf, eofs.S.toBreeze.asInstanceOf[BDV[Double]])
-    dumpV(outf, info.productElement(1).asInstanceOf[BDV[Double]])
+    val outf = new GZIPOutputStream(new FileOutputStream(outdest))
+    val msgpack = new MessagePack();
+    val packer = msgpack.createPacker(outf)
+
+    packer.write(eofs.U.numCols) // number of EOFs
+    packer.write(eofs.U.numRows) // number of observation points
+    packer.write(eofs.U.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
+    packer.write(eofs.V.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
+    packer.write(eofs.S.toBreeze.asInstanceOf[BDV[Double]].toArray)
+    packer.write(info.productElement(1).asInstanceOf[BDV[Double]].toArray)
     if (info.productArity == 3) {
-      dumpV(outf, info.productElement(2).asInstanceOf[BDV[Double]])
+      packer.write(info.productElement(2).asInstanceOf[BDV[Double]].toArray) 
     }
+  
     outf.close()
-  }
-
-  def dumpV(outf: DataOutputStream, v: BDV[Double]) = {
-    outf.writeInt(v.length) 
-    for(i <- 0 until v.length) {
-      outf.writeDouble(v(i))
-    }
-  }
-
-  def dumpVI(outf: DataOutputStream, v: BDV[Int]) = {
-    outf.writeInt(v.length) 
-    for(i <- 0 until v.length) {
-      outf.writeInt(v(i))
-    }
-  }
-
-  def dumpMat(outf: DataOutputStream, mat: BDM[Double]) = {
-    outf.writeInt(mat.rows)
-    outf.writeInt(mat.cols)
-    for(i <- 0 until mat.rows) {
-      for(j <- 0 until mat.cols) {
-        outf.writeDouble(mat(i,j))
-      }
-    }
   }
 
   // returns a column vector of the means of each row
