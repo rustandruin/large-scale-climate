@@ -32,14 +32,19 @@ LOGNAME="$JOBNAME.log"
 
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
-# Add back --master yarn \ when running yarn
-  # --num-executors 29 \
-  # took memory down from 180G on starcluster/yarn
-# added multiple executors vs 29 on starcluster/yarn
+# Parameters below relevant for Spark 1.4.0:
+# use 220G in standalone mode, 210G for yarn
+# see https://support.pivotal.io/hc/en-us/articles/201462036-Mapreduce-YARN-Memory-Parameters 
+# for guidance on setting yarn memory parameters; note that Spark 1.4.0 only sets yarn's max-memory
+# setting (to >240Gb), and everything else uses the default for both yarn and MapReduce. This seems
+# to allow the EOF code to run as long as you don't ask for too much memory (hence the 210G recommendation
+# in the yarn case)
+
 spark-submit --verbose \
+  --master yarn \
   --num-executors 30 \
-  --driver-memory 220G \
-  --executor-memory 220G \
+  --driver-memory 210G \
+  --executor-memory 210G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
