@@ -20,10 +20,10 @@ NUMCOLS=6349676
 INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
-PREPROCESS="cosLat+centerOverAllObservations"
-PREPROCESS="standardizeEach"
-PREPROCESS="standardizeLevels"
-PREPROCESS="cosLat+standardizeLevels"
+#PREPROCESS="cosLat+centerOverAllObservations"
+#PREPROCESS="standardizeEach"
+#PREPROCESS="standardizeLevels"
+#PREPROCESS="cosLat+standardizeLevels"
 NUMEOFS=20
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
