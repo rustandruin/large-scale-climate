@@ -100,7 +100,7 @@ object computeEOFs {
         case SQLRow(index: Long, vector: Vector) =>
           new IndexedRow(index, vector)
       }
-    }.coalesce(2880)
+    }//.coalesce(2880)
     //rows.persist(StorageLevel.MEMORY_ONLY_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
 

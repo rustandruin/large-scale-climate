@@ -24,7 +24,7 @@ PREPROCESS="centerOverAllObservations"
 #PREPROCESS="standardizeEach"
 #PREPROCESS="standardizeLevels"
 #PREPROCESS="cosLat+standardizeLevels"
-NUMEOFS=20
+NUMEOFS=10
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
 OUTDEST="$DATADIR/$JOBNAME.bin"
@@ -32,16 +32,22 @@ LOGNAME="$JOBNAME.log"
 
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
-# Parameters below relevant for Spark 1.4.0:
-# use 220G in standalone mode, 210G for yarn
-# see https://support.pivotal.io/hc/en-us/articles/201462036-Mapreduce-YARN-Memory-Parameters 
-# for guidance on setting yarn memory parameters; note that Spark 1.4.0 only sets yarn's max-memory
-# setting (to >240Gb), and everything else uses the default for both yarn and MapReduce. This seems
-# to allow the EOF code to run as long as you don't ask for too much memory (hence the 210G recommendation
-# in the yarn case)
+# On EC2 there are 32 cores/node and 244GB/node 
+# use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
+# use as much memory as available so can cache the entire 2GB RDD
+#--num-executors 30
+#--driver-memory 210G
+#--executor-memory 210G
+
+# On Cori there are 32 cores/node and 128GB/node
+# use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
+# can only cache about .71% of the 2GB RDD
+#--num-executors 30
+#--driver-memory 120G
+#--executor-memory 120G
 
 spark-submit --verbose \
-  --master yarn \
+  --master "spark://ec2-54-200-88-120.us-west-2.compute.amazonaws.com:7077" \
   --num-executors 30 \
   --driver-memory 210G \
   --executor-memory 210G \
