@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Computes the 3D EOFs using CSFR dataset
+# You need to change the memory setting and location of the data for different platforms
 
 DIR="$(cd "`dirname "$0"`"/..; pwd)"
 LOGDIR="$DIR/eventLogs"
@@ -17,14 +18,15 @@ JARNAME=$1
 NUMROWS=46715
 NUMCOLS=6349676
 #INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
-INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
+#INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
+INSOURCE=$SCRATCH/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
 #PREPROCESS="cosLat+centerOverAllObservations"
 #PREPROCESS="standardizeEach"
 #PREPROCESS="standardizeLevels"
 #PREPROCESS="cosLat+standardizeLevels"
-NUMEOFS=10
+NUMEOFS=20
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
 OUTDEST="$DATADIR/$JOBNAME.bin"
@@ -38,19 +40,21 @@ LOGNAME="$JOBNAME.log"
 #--num-executors 30
 #--driver-memory 210G
 #--executor-memory 210G
+#--master "spark://ec2-54-200-88-120.us-west-2.compute.amazonaws.com:7077"  # for example
 
 # On Cori there are 32 cores/node and 128GB/node
 # use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
-# can only cache about .71% of the 2GB RDD
+# can only cache ? < 100 % of the RDD
 #--num-executors 30
-#--driver-memory 120G
-#--executor-memory 120G
+#--driver-memory 100G
+#--executor-memory 100G
+#--master $SPARKURL
 
 spark-submit --verbose \
-  --master "spark://ec2-54-200-88-120.us-west-2.compute.amazonaws.com:7077" \
+  --master $SPARKURL \
   --num-executors 30 \
-  --driver-memory 210G \
-  --executor-memory 210G \
+  --driver-memory 100G \
+  --executor-memory 100G \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
