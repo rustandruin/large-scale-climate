@@ -22,10 +22,6 @@ NUMCOLS=6349676
 INSOURCE=$SCRATCH/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
-#PREPROCESS="cosLat+centerOverAllObservations"
-#PREPROCESS="standardizeEach"
-#PREPROCESS="standardizeLevels"
-#PREPROCESS="cosLat+standardizeLevels"
 NUMEOFS=20
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
