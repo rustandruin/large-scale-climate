@@ -21,8 +21,8 @@ NUMCOLS=6349676
 #INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
 INSOURCE=$SCRATCH/CFSROparquet
 
-PREPROCESS="centerOverAllObservations"
-NUMEOFS=20
+PREPROCESS="cosLat+centerOverAllObservations"
+NUMEOFS=100
 
 JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
 OUTDEST="$DATADIR/$JOBNAME.bin"

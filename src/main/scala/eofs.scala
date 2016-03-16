@@ -21,7 +21,7 @@ import math.{ceil, log}
 import scala.collection.mutable.ArrayBuffer
 
 import java.util.Arrays
-import java.io.FileOutputStream
+import java.io.{DataOutputStream, BufferedOutputStream, FileOutputStream, File}
 import java.util.zip.GZIPOutputStream
 import java.util.Calendar
 import java.text.SimpleDateFormat
@@ -72,11 +72,12 @@ object computeEOFs {
     val (u, v) = getLowRankFactorization(mat, numeofs)
     //val (u, v) = getApproxLowRankFactorization(mat, numeofs, 2, 4)
     val climateEOFs = convertLowRankFactorizationToEOFs(u, v)
-    writeOut(outdest, climateEOFs, info)
+    writeOutBasic(outdest, climateEOFs, info)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
+    /*
     val errorvariance = calcSSE(mat, climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]], 
       diag(BDV(climateEOFs.S.toArray)) * climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]].t)
     val approxvariance = climateEOFs.S.toArray.map(math.pow(_,2)).sum
@@ -85,6 +86,7 @@ object computeEOFs {
     report(s"Error variance: $errorvariance")
     report(s"Data variance: $datavariance")
     report(s"$numeofs EOFs explain ${approxvariance/datavariance} of the variance with ${errorvariance/datavariance} relative error")
+    */
 
   }
 
@@ -100,7 +102,7 @@ object computeEOFs {
         case SQLRow(index: Long, vector: Vector) =>
           new IndexedRow(index, vector)
       }
-    }//.coalesce(2880)
+    }.repartition(2880)
     //rows.persist(StorageLevel.MEMORY_ONLY_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
 
@@ -124,8 +126,8 @@ object computeEOFs {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
 
-      val latitudeweights = BDV.zeros[Double](tempmat.numCols.toInt)
-      sc.textFile(inpath + "/latitudeweights").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
+      val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
+      sc.textFile(inpath + "/latitudeweights.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
 
       val reweightedmat = areaWeight(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -139,7 +141,7 @@ object computeEOFs {
   }
 
   def areaWeight(mat: IndexedRowMatrix, weights: BDV[Double]) : IndexedRowMatrix = {
-    val reweightedrows = mat.rows.map(x => new IndexedRow(x.index, new DenseVector((x.vector.toBreeze.asInstanceOf[BDV[Double]] :* weights).toArray)) )
+    val reweightedrows = mat.rows.map(x => new IndexedRow(x.index, new DenseVector((x.vector.toBreeze.asInstanceOf[BDV[Double]] * weights(x.index.toInt)).toArray)) )
     new IndexedRowMatrix(reweightedrows, mat.numRows, mat.numCols.toInt)
   }
 
@@ -177,6 +179,42 @@ object computeEOFs {
     }
   
     outf.close()
+  }
+
+  def writeOutBasic(outdest: String, eofs: EOFDecomposition, info: Product) {
+    val outf = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(new File(outdest))))
+    dumpMat(outf, eofs.U.toBreeze.asInstanceOf[BDM[Double]])
+    dumpMat(outf, eofs.V.toBreeze.asInstanceOf[BDM[Double]])
+    dumpV(outf, eofs.S.toBreeze.asInstanceOf[BDV[Double]])
+    dumpV(outf, info.productElement(1).asInstanceOf[BDV[Double]])
+    if (info.productArity == 3) {
+      dumpV(outf, info.productElement(2).asInstanceOf[BDV[Double]])
+    }
+    outf.close()
+  }
+
+  def dumpV(outf: DataOutputStream, v: BDV[Double]) = {
+    outf.writeInt(v.length) 
+    for(i <- 0 until v.length) {
+      outf.writeDouble(v(i))
+    }
+  }
+
+  def dumpVI(outf: DataOutputStream, v: BDV[Int]) = {
+    outf.writeInt(v.length) 
+    for(i <- 0 until v.length) {
+      outf.writeInt(v(i))
+    }
+  }
+
+  def dumpMat(outf: DataOutputStream, mat: BDM[Double]) = {
+    outf.writeInt(mat.rows)
+    outf.writeInt(mat.cols)
+    for(i <- 0 until mat.rows) {
+      for(j <- 0 until mat.cols) {
+        outf.writeDouble(mat(i,j))
+      }
+    }
   }
 
   // returns a column vector of the means of each row

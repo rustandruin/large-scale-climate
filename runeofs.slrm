@@ -1,0 +1,19 @@
+#!/bin/bash -l
+
+#SBATCH -N 41
+#SBATCH -p regular
+#SBATCH -t 04:00:00
+#SBATCH --ccm
+#SBATCH --qos=premium
+
+bash
+module load spark/1.5.1 sbt
+start-all.sh
+
+# generate the eofs
+sbt submit
+
+# convert the binary outputs to csv
+sbt BinToNumpy2
+
+exit

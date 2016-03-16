@@ -13,6 +13,10 @@ BinToNumpy <<= (assembly in Compile) map {
   (jarFile: File) => s"src/runbintonumpy.sh ${jarFile} "!
 }
 
+lazy val BinToNumpy2 = taskKey[Unit]("Convert binary dump of EOFs to numpy dataset")
+BinToNumpy2<<= (assembly in Compile) map {
+  (jarFile: File) => s"src/runbintonumpy2.sh ${jarFile} "!
+}
 lazy val CSVToParquet = taskKey[Unit]("Convert CSV Data to Parquet")
 CSVToParquet <<= (assembly in Compile) map {
   (jarFile: File) => s"src/runcsvtoparquet.sh ${jarFile} "!
