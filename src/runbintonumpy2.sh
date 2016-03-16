@@ -14,10 +14,10 @@ INBIN=$WORKINGDIR/data/eofs-cosLat+centerOverAllObservations-100.bin
 OUTCSV=$WORKINGDIR/data
 OUTNUMPY=$OUTCSV
 
-# spark-submit is a BAD idea (unnecessary), try to just get the right classpath and use scala?
-# spark-submit --master $SPARKURL --verbose \
-#    --driver-memory 40G \
-#    --class org.apache.spark.mllib.linalg.distributed.ConvertDump \
-#    $JARFILE $INBIN $OUTCSV
+spark-submit is a BAD idea (unnecessary), try to just get the right classpath and use scala?
+spark-submit --master $SPARKURL --verbose \
+   --driver-memory 40G \
+   --class org.apache.spark.mllib.linalg.distributed.ConvertDump \
+   $JARFILE $INBIN $OUTCSV
 
 python $CURDIR/convertEofsToNetCDF.py

@@ -9,22 +9,29 @@
 # to determine how to create it directly...
 
 # to compile the CDL file to netCDF, use
-# ncgen -o <outfname> <CDLfname>
+# ncgen -v 2 -o <outfname> <CDLfname>
+# the -v 2 argument tells it to use 64bit offsets (otherwise you can't generate files larger than 2Gb)
 
 import numpy as np
 from os.path import join
+import time
 
 numEofs = 100
 numObservedGridPoints = 6349676
 numDates = 46715
 dataDirectory = '/global/cscratch1/sd/gittens/large-scale-climate/data'
 masktemplatefname = '/global/cscratch1/sd/gittens/CFSROparquet/masktemplate.npy'
+latsfname = '/global/cscratch1/sd/gittens/CFSROparquet/lats.npy'
+lonsfname = '/global/cscratch1/sd/gittens/CFSROparquet/lons.npy'
 coldatafname = '/global/cscratch1/sd/gittens/CFSROparquet/coldates'
 
-# loads the mask indicating what grid points were not observed, and 
-# the list of the dates each column in the right EOFs correspond to
+# loads the mask indicating what grid points were not observed,  
+# the list of the dates each column in the right EOFs correspond to,
+# and the latitudes and longitude points
 templatemask = np.load(masktemplatefname)
 coldates = [line.rstrip('\n') for line in open(coldatafname)]
+lats = np.load(latsfname)
+lons = np.load(lonsfname)
 
 dimsperlevel = 360*720
 dims = dimsperlevel * 41
@@ -32,6 +39,12 @@ mask = np.zeros((dims,)) < 0
 
 for index in range(41):
     mask[index*dimsperlevel:(index+1)*dimsperlevel] = templatemask[index,...].reshape((dimsperlevel,))
+
+# hard-coded: the depth of the observations within the ocean (m)
+levels = np.array([0, 5, 15, 25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125, 135, \
+                   145, 155, 165, 175, 185, 195, 205, 215, 225, 238, 262, 303, \
+                   366, 459, 584, 747, 949, 1193, 1479, 1807, 2174, 2579, 3016, \
+                   3483, 3972, 4478])
 
 # load the EOFs from the CSV files
 def loadEOF(fname, numeofs, numobs):
@@ -59,12 +72,12 @@ def fullEOF(eof):
     eofpadded[mask == False] = eof
     return eofpadded
 
-print "Loading the column EOFs from CSV"
-observedeofs = loadEOF(join(dataDirectory, "colEOFs"), numEofs, numObservedGridPoints)
 print "Loading the eigenvalues from CSV"
 singvals = loadVec(join(dataDirectory, "evalEOFs"), numEofs)
 print "Loading the row means from CSV"
 observedmeans = loadVec(join(dataDirectory, "rowMeans"), numObservedGridPoints)
+print "Loading the column EOFs from CSV"
+observedeofs = loadEOF(join(dataDirectory, "colEOFs"), numEofs, numObservedGridPoints)
 print "Loading the row EOFs from CSV"
 temporaleofs = loadEOF(join(dataDirectory, "rowEOFs"), numEofs, numDates)
 
