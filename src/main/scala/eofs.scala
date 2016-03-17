@@ -65,28 +65,34 @@ object computeEOFs {
     val preprocessMethod = args(3)
     val numeofs = args(4).toInt
     val outdest = args(5)
+    val randomizedq = args(6)
+    val oversample = 5
+    val powIters = 10
     
     val info = loadParquetClimateData(sc, inpath, numrows, numcols, preprocessMethod)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
-    val (u, v) = getLowRankFactorization(mat, numeofs)
-    //val (u, v) = getApproxLowRankFactorization(mat, numeofs, 2, 4)
-    val climateEOFs = convertLowRankFactorizationToEOFs(u, v)
+    val (u,v) = 
+    if ("exact" == randomizedq) {
+      getLowRankFactorization(mat, numeofs)
+    } else if ("randomized" == randomizedq) {
+      getApproxLowRankFactorization(mat, numeofs, oversample, powIters)
+    } else if ("both" == randomizedq) {
+      val (u1,v1) = getLowRankFactorization(mat, numeofs)
+      val (u2,v2) = getApproxLowRankFactorization(mat, numeofs, oversample, powIters)
+      val exactEOFs = convertLowRankFactorizationToEOFs(u1.asInstanceOf[DenseMatrix], v1.asInstanceOf[DenseMatrix])
+      val inexactEOFs = convertLowRankFactorizationToEOFs(u2.asInstanceOf[DenseMatrix], v2.asInstanceOf[DenseMatrix])
+      writeOut(outdest + "exact", exactEOFs, info)
+      writeOut(outdest + "inexact", inexactEOFs, info)
+      sc.stop()
+      System.exit(0)
+    }
+    val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
     writeOutBasic(outdest, climateEOFs, info)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
-    /*
-    val errorvariance = calcSSE(mat, climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]], 
-      diag(BDV(climateEOFs.S.toArray)) * climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]].t)
-    val approxvariance = climateEOFs.S.toArray.map(math.pow(_,2)).sum
-    val datavariance = mat.rows.map(x => x.vector.toArray.map(math.pow(_,2)).sum).sum
-    report(s"Variance of low-rank approximation: $approxvariance")
-    report(s"Error variance: $errorvariance")
-    report(s"Data variance: $datavariance")
-    report(s"$numeofs EOFs explain ${approxvariance/datavariance} of the variance with ${errorvariance/datavariance} relative error")
-    */
 
   }
 
@@ -102,7 +108,7 @@ object computeEOFs {
         case SQLRow(index: Long, vector: Vector) =>
           new IndexedRow(index, vector)
       }
-    }.repartition(2880)
+    }//.repartition(2880)
     //rows.persist(StorageLevel.MEMORY_ONLY_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
 
@@ -269,10 +275,10 @@ object computeEOFs {
     val maxIter = 30
     val covOperator = ( v: BDV[Double] ) => multiplyCovarianceBy(mat, fromBreeze(v.toDenseMatrix).transpose).toBreeze.asInstanceOf[BDM[Double]].toDenseVector
     val (lambda, u) = EigenValueDecomposition.symmetricEigs(covOperator, mat.numCols.toInt, rank, tol, maxIter)
-    report(s"Square Frobenius norm of approximate row basis for data: ${u.data.map(x=>x*x).sum}")
+    //report(s"Square Frobenius norm of approximate row basis for data: ${u.data.map(x=>x*x).sum}")
     val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
     val qr.QR(q,r) = qr.reduced(Xlowrank)
-    report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
+    //report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
     (fromBreeze(q), fromBreeze(r*u.t)) 
   }
 
@@ -281,15 +287,19 @@ object computeEOFs {
   def getApproxLowRankFactorization(mat: IndexedRowMatrix, rank: Int, oversample: Int, numIters: Int) : Tuple2[DenseMatrix, DenseMatrix] = {
     val rng = new java.util.Random()
     var Y = DenseMatrix.randn(mat.numCols.toInt, rank + oversample, rng)
-    var Ynew = multiplyCovarianceBy(mat, Y)
-    Y = fromBreeze(qr.justQ(Ynew.toBreeze.asInstanceOf[BDM[Double]]))
-    for( iterIdx <- 0 until numIters-1) {
-      Ynew = multiplyCovarianceBy(mat, Y)
-      Y = fromBreeze(qr.justQ(Ynew.toBreeze.asInstanceOf[BDM[Double]]))
+    for( iterIdx <- 0 until numIters) {
+      val Ynew = multiplyCovarianceBy(mat, Y)
+      val qr.QR(q,r) = qr.reduced(Ynew.toBreeze.asInstanceOf[BDM[Double]])
+      Y = fromBreeze(q)
     }
+    // refine the approximation to the top right singular vectors of the covariance matrix:
+    // rather than taking the first columns from the extended basis Y, take the svd of Y
+    // and use its top singular vectors
     val tempsvd = svd.reduced(Y.toBreeze.asInstanceOf[BDM[Double]])
-    val Q = tempsvd.U(::, 0 until rank).copy
-    (fromBreeze(Q), leftMultiplyBy(mat, fromBreeze(Q).transpose))
+    val V = tempsvd.U(::, 0 until rank).copy
+    val Xlowrank = mat.multiply(fromBreeze(V)).toBreeze()
+    val qr.QR(q,r) = qr.reduced(Xlowrank)
+    (fromBreeze(q), fromBreeze(r*V.t))
   }
 
   // computes BA where B is a local matrix and A is distributed: let b_i denote the

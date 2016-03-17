@@ -7,50 +7,50 @@ LOGDIR="$DIR/eventLogs"
 DATADIR="$DIR/data"
 JARNAME=$1
 
-# for the small dataset
-#NUMROWS=104
-#NUMCOLS=6349676
-#FORMAT=csv
-#INSOURCE=hdfs://master:9000/user/ubuntu/smallclimatevals
-#MASKSOURCE='notmasked'
-#MASKSOURCE=hdfs://master:9000/user/ubuntu/CSFROcsv/mask/part-00000.gz
 # for the large dataset
 NUMROWS=46715
 NUMCOLS=6349676
-#INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
-#INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
-INSOURCE=$SCRATCH/CFSROparquet
 
-PREPROCESS="cosLat+centerOverAllObservations"
-NUMEOFS=100
+#PREPROCESS="cosLat+centerOverAllObservations"
+PREPROCESS="centerOverAllObservations"
+NUMEOFS=2
+#RANDOMIZEDQ="exact"
+#RANDOMIZEDQ="randomized"
+RANDOMIZEDQ="both"
 
-JOBNAME="eofs-$PREPROCESS-$NUMEOFS"
+JOBNAME="eofs-$PREPROCESS-$RANDOMIZEDQ-$NUMEOFS"
 OUTDEST="$DATADIR/$JOBNAME.bin"
 LOGNAME="$JOBNAME.log"
 
 [ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
-# On EC2 there are 32 cores/node and 244GB/node 
-# use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
-# use as much memory as available so can cache the entire 2GB RDD
-#--num-executors 30
-#--driver-memory 210G
-#--executor-memory 210G
-#--master "spark://ec2-54-200-88-120.us-west-2.compute.amazonaws.com:7077"  # for example
-
-# On Cori there are 32 cores/node and 128GB/node
-# use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
-# can only cache ? < 100 % of the RDD
-#--num-executors 30
-#--driver-memory 100G
-#--executor-memory 100G
-#--master $SPARKURL
+#PLATFORM="CORI"
+PLATFORM="EC2"
+if [ $PLATFORM="EC2" ]; then
+  # On EC2 there are 32 cores/node and 244GB/node 
+  # use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
+  # use as much memory as available so can cache the entire 2GB RDD
+INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
+NUMEXECUTORS=30
+DRIVERMEMORY="210G"
+EXECUTORMEMORY="210G"
+MASTER="spark://ec2-54-187-175-26.us-west-2.compute.amazonaws.com:7077"
+elif [ $PLATFORM="CORI" ]; then 
+  # On Cori there are 32 cores/node and 128GB/node
+  # use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
+  # can only cache ? < 100 % of the RDD
+INSOURCE=$SCRATCH/CFSROparquet
+NUMEXECUTORS=30
+DRIVERMEMORY="100G"
+EXECUTORMEMORY="100G"
+MASTER=$SPARKURL
+fi
 
 spark-submit --verbose \
-  --master $SPARKURL \
-  --num-executors 30 \
-  --driver-memory 100G \
-  --executor-memory 100G \
+  --master $MASTER \
+  --num-executors $NUMEXECUTORS \
+  --driver-memory $DRIVERMEMORY \
+  --executor-memory $EXECUTORMEMORY \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
@@ -60,5 +60,6 @@ spark-submit --verbose \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
-  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST \
+  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST $RANDOMIZEDQ\
   2>&1 | tee $LOGNAME
+

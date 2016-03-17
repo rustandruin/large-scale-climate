@@ -23,3 +23,9 @@ pssh -h ~/spark/conf/slaves 'yum install -y --enablerepo=epel atlas atlas-devel 
 export PATH=$PATH:~/spark/bin
 screen
 sbt submit
+
+if you need to compare inexact  and exact, you'll need to use msgpack,
+  assuming under python:
+
+  easy_install pip
+  pip install u-msgpack-python
