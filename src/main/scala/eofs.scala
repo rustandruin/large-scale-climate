@@ -288,7 +288,7 @@ object computeEOFs {
     val rng = new java.util.Random()
     var Y = DenseMatrix.randn(mat.numCols.toInt, rank + oversample, rng)
     for( iterIdx <- 0 until numIters) {
-      val Ynew = multiplyCovarianceBy(mat, Y)
+      val Ynew = multiplyCovarianceByV2(mat, Y)
       val qr.QR(q,r) = qr.reduced(Ynew.toBreeze.asInstanceOf[BDM[Double]])
       Y = fromBreeze(q)
     }
@@ -331,6 +331,24 @@ object computeEOFs {
         },
         combOp = (U1, U2) => U1 += U2
       )
+    fromBreeze(1.0/mat.numRows * result)
+  }
+
+  def multiplyCovarianceByV2(mat: IndexedRowMatrix, rhs: DenseMatrix): DenseMatrix = {
+    val rhsBrz = rhs.toBreeze.asInstanceOf[BDM[Double]]
+    val numCols = rhsBrz.rows
+
+    def outerProduct(iter: Iterator[IndexedRow]) : Iterator[BDM[Double]] = {
+      val mat = BDM.zeros[Double](iter.length, numCols)
+      for (rowidx <- 0 until iter.length) {
+        val currow = iter.next.vector.toBreeze.asInstanceOf[BDV[Double]].t
+        mat(rowidx, ::) := currow
+      }
+      val chunk = mat.t * (mat * rhsBrz)
+      return List(chunk).iterator
+    }
+
+    val result = mat.rows.mapPartitions(outerProduct).treeReduce(_ + _)
     fromBreeze(1.0/mat.numRows * result)
   }
 }
