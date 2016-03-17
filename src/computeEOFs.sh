@@ -4,7 +4,7 @@
 #
 # Note: you will need to set the spark master url in runOneJob.sh manually for EC2
 
-CURDIR="$(cd "`dirname "$0"`"/..; pwd)"
+CURDIR="$(cd "`dirname "$0"`"; pwd)"
 
 #PLATFORM="CORI"
 PLATFORM="EC2"

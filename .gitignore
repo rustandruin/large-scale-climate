@@ -10,3 +10,4 @@ grib_conversion*
 conversion_error_log
 data/*
 *.out
+metastore_db/*
