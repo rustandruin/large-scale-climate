@@ -88,7 +88,8 @@ object computeEOFs {
       System.exit(0)
     }
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
-    writeOutBasic(outdest, climateEOFs, info)
+    // Only uncomment if we need the EOFs, otherwise we really only care about timing information
+    //writeOutBasic(outdest, climateEOFs, info)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")

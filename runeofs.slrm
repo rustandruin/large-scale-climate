@@ -8,6 +8,7 @@
 
 bash
 module load spark/1.5.1 sbt
+export SPARK_LOCAL_DIRS="/tmp,/dev/shm"
 start-all.sh
 
 # generate the eofs

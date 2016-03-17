@@ -1,65 +1,19 @@
 #!/usr/bin/env bash
-# Computes the 3D EOFs using CSFR dataset
-# You need to change the memory setting and location of the data for different platforms
+# Computes the 3D EOFs using multiple settings on the CSFR dataset:
+# different ranks, exact and randomized PCAs
+#
+# Note: you will need to set the spark master url in runOneJob.sh manually for EC2
 
-DIR="$(cd "`dirname "$0"`"/..; pwd)"
-LOGDIR="$DIR/eventLogs"
-DATADIR="$DIR/data"
-JARNAME=$1
-
-# for the large dataset
-NUMROWS=46715
-NUMCOLS=6349676
-
-#PREPROCESS="cosLat+centerOverAllObservations"
-PREPROCESS="centerOverAllObservations"
-NUMEOFS=2
-#RANDOMIZEDQ="exact"
-RANDOMIZEDQ="randomized"
-#RANDOMIZEDQ="both"
-
-JOBNAME="eofs-$PREPROCESS-$RANDOMIZEDQ-$NUMEOFS"
-OUTDEST="$DATADIR/$JOBNAME.bin"
-LOGNAME="$JOBNAME.log"
-
-[ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
+CURDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 #PLATFORM="CORI"
 PLATFORM="EC2"
-if [ $PLATFORM="EC2" ]; then
-  # On EC2 there are 32 cores/node and 244GB/node 
-  # use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
-  # use as much memory as available so can cache the entire 2GB RDD
-INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
-NUMEXECUTORS=30
-DRIVERMEMORY="210G"
-EXECUTORMEMORY="210G"
-MASTER="spark://ec2-54-187-175-26.us-west-2.compute.amazonaws.com:7077"
-elif [ $PLATFORM="CORI" ]; then 
-  # On Cori there are 32 cores/node and 128GB/node
-  # use 30 executors b/c that's what did for CX (apparently, but I wonder if it helps to increase executors)
-  # can only cache ? < 100 % of the RDD
-INSOURCE=$SCRATCH/CFSROparquet
-NUMEXECUTORS=30
-DRIVERMEMORY="100G"
-EXECUTORMEMORY="100G"
-MASTER=$SPARKURL
-fi
 
-spark-submit --verbose \
-  --master $MASTER \
-  --num-executors $NUMEXECUTORS \
-  --driver-memory $DRIVERMEMORY \
-  --executor-memory $EXECUTORMEMORY \
-  --conf spark.eventLog.enabled=true \
-  --conf spark.eventLog.dir=$LOGDIR \
-  --conf spark.driver.maxResultSize=30G \
-  --conf spark.task.maxFailures=4 \
-  --conf spark.worker.timeout=1200000 \
-  --conf spark.network.timeout=1200000 \
-  --jars $JARNAME \
-  --class org.apache.spark.mllib.climate.computeEOFs \
-  $JARNAME \
-  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST $RANDOMIZEDQ\
-  2>&1 | tee $LOGNAME
+$CURDIR/runOneJob.sh $1 $PLATFORM 10 exact
+$CURDIR/runOneJob.sh $1 $PLATFORM 10 randomized
 
+$CURDIR/runOneJob.sh $1 $PLATFORM 20 exact
+$CURDIR/runOneJob.sh $1 $PLATFORM 20 randomized
+
+$CURDIR/runOneJob.sh $1 $PLATFORM 40 exact
+$CURDIR/runOneJob.sh $1 $PLATFORM 40 randomized
