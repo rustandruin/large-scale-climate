@@ -13,6 +13,18 @@ See runeofs.slrm for an example of using sbatch to run experiments on Cori
 
 The console logs are saved to the base repo directory, and the event logs are stored to the eventLogs subdirectory
 
+Miscellany:
+
+We should take into consideration that EC2 has more memory per physical node than Cori (244Gb vs 128Gb), a situation exacerbated by the need on Cori to have some space left over for ramdisks. It seems Spark can safely ask for about 105 Gb/node on Cori, while it can ask for about 210 Gb on EC2, so if we want to keep our 2.2Tb dataset resident in memory on both plaforms and run our experiments using 960 cores, we can either use the setting 
+
+EC2: 30 nodes, 1 executor/node using all 32 cores, 210Gb/executor
+Cori: 60 nodes, 1 executor/node using 16 cores, 105Gb/executor 
+which has the same memory/core ratio and provides the same amount of space for storing the RDD, or
+
+EC2: 30 nodes, 2 executors/node using 16 cores, 105Gb/executor
+Cori: 60 nodes, 1 executor/node using 16 cores, 105Gb/executor
+This seems more reasonable
+
 Quick overview of the algorithms:
 
 We want to compute the rank-k truncated PCA of a tall-skinny matrix A. We first process A so that it has mean zero rows. 
