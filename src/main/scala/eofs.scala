@@ -285,7 +285,7 @@ object computeEOFs {
     val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
     val qrStartTime = System.currentTimeMillis
     val qr.QR(q,r) = qr.reduced(Xlowrank)
-    println("Local Compute: Breeze QR Time = " + System.currentTimeMillis - qrStartTime)
+    println("Local Compute: Breeze QR Time = " + (System.currentTimeMillis - qrStartTime))
 
     //report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
     (fromBreeze(q), fromBreeze(r*u.t)) 
