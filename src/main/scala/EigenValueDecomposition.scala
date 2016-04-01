@@ -54,8 +54,9 @@ private[mllib] object EigenValueDecomposition {
       maxIterations: Int): (BDV[Double], BDM[Double]) = {
     // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
-
+    val arpackStart = System.currentTimeMillis
     val arpack = ARPACK.getInstance()
+    println("Local Compute: ARPACK Start Time: " + (System.currentTimeMillis - arpackStart))
 
     // tolerance used in stopping criterion
     val tolW = new doubleW(tol)
@@ -90,12 +91,14 @@ private[mllib] object EigenValueDecomposition {
     var workl = new Array[Double](ncv * (ncv + 8))
     var ipntr = new Array[Int](11)
 
+    val arpackDsaupdStart = System.currentTimeMillis
     // call ARPACK's reverse communication, first iteration with ido = 0
     arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr, workd,
       workl, workl.length, info)
-
+    println("Local Compute: 1st ARPACK dsaupd = " + (System.currentTimeMillis - arpackDsaupdStart ))
     val w = BDV(workd)
 
+    var iterArpackDsaupdTime: Long = 0
     // ido = 99 : done flag in reverse communication
     while (ido.`val` != 99) {
       if (ido.`val` != -1 && ido.`val` != 1) {
@@ -109,10 +112,13 @@ private[mllib] object EigenValueDecomposition {
       val y = w.slice(outputOffset, outputOffset + n)
       y := mul(x)
       // call ARPACK's reverse communication
+      val arpackDsaupdStart = System.currentTimeMillis
       arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
         workd, workl, workl.length, info)
+      iterArpackDsaupdTime += System.currentTimeMillis - arpackDsaupdStart
     }
 
+    println("Local Compute: Arpack dsaupd iterations = " + iterArpackDsaupdTime )
     if (info.`val` != 0) {
       info.`val` match {
         case 1 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
@@ -124,18 +130,23 @@ private[mllib] object EigenValueDecomposition {
             " Please refer ARPACK user guide for error message.")
       }
     }
-
+    var javaCopyingTime: Long = 0
+    val javaCopyStart: Long = System.currentTimeMillis
     val d = new Array[Double](nev.`val`)
     val select = new Array[Boolean](ncv)
     // copy the Ritz vectors
     val z = java.util.Arrays.copyOfRange(v, 0, nev.`val` * n)
-
+    javaCopyingTime += System.currentTimeMillis - javaCopyStart
     // call ARPACK's post-processing for eigenvectors
+    val arpackDseupdStartTime = System.currentTimeMillis
     arpack.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid, ncv, v, n,
       iparam, ipntr, workd, workl, workl.length, info)
 
+    println("Local Compute: Arpack dseupd time = " + (System.currentTimeMillis - arpackDseupdStartTime) )
     // number of computed eigenvalues, might be smaller than k
+
     val computed = iparam(4)
+
 
     val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map { r =>
       (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
