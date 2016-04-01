@@ -87,7 +87,12 @@ object computeEOFs {
       sc.stop()
       System.exit(0)
     }
+
+    //should be minimal here but we will time it
+    val convertStart = System.currentTimeMillis
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
+    //val convertTime = System.currentTimeMillis - convertStart
+    println("LocalCompute: Convert EOF Time = " + (System.currentTimeMillis - convertStart))
     // Only uncomment if we need the EOFs, otherwise we really only care about timing information
     //writeOutBasic(outdest, climateEOFs, info)
 
@@ -278,7 +283,10 @@ object computeEOFs {
     val (lambda, u) = EigenValueDecomposition.symmetricEigs(covOperator, mat.numCols.toInt, rank, tol, maxIter)
     //report(s"Square Frobenius norm of approximate row basis for data: ${u.data.map(x=>x*x).sum}")
     val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
+    val qrStartTime = System.currentTimeMillis
     val qr.QR(q,r) = qr.reduced(Xlowrank)
+    println("Local Compute: Breeze QR Time = " + (System.currentTimeMillis - qrStartTime))
+
     //report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
     (fromBreeze(q), fromBreeze(r*u.t)) 
   }
