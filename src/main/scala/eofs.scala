@@ -52,7 +52,7 @@ object computeEOFs {
 
   def main(args: Array[String]) = {
     val conf = new SparkConf().setAppName("ClimateEOFs")
-    conf.set("spark.task.maxFailures", "1").set("spark.shuffle.blockTransferService", "nio")
+    //conf.set("spark.task.maxFailures", "1").set("spark.shuffle.blockTransferService", "nio")
     val sc = new SparkContext(conf)
     sys.addShutdownHook( { sc.stop() } )
     appMain(sc, args)
