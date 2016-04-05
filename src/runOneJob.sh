@@ -3,7 +3,8 @@
 # You need to change the memory setting and location of the data for different platforms
 
 DIR="$(cd "`dirname "$0"`"/..; pwd)"
-LOGDIR="$DIR/eventLogs"
+#LOGDIR="$DIR/eventLogs"
+LOGDIR=$SCRATCH/spark/spark_event_logs
 DATADIR="$DIR/data"
 JARNAME=$1
 PLATFORM=$2
@@ -35,11 +36,14 @@ elif [ $PLATFORM == "CORI" ]; then
   # On Cori there are 32 cores/node and 128GB/node
   # To have a fair comparison to EC2, use more physical nodes but less cores per node so that each core has the same amount of memory as on EC2:
   # on EC2, 32 cores have 210G, so configure Cori so 16 cores have 105G, then on EC2 have 30 nodes, so need 60 on Cori
-INSOURCE=$SCRATCH/CFSROparquet
-NUMEXECUTORS=60
-NUMCORES=16
+#INSOURCE=$SCRATCH/CFSROparquet
+INSOURCE=/global/cscratch1/sd/jialin/climate/oceanTemps.hdf5
+NUMEXECUTORS=100
+NUMCORES=32
 DRIVERMEMORY=105G
 EXECUTORMEMORY=105G
+VARIABLE="temperatures"
+REPARTITION=$(($NUMCORES * $NUMEXECUTORS))
 MASTER=$SPARKURL
 fi
 
@@ -58,6 +62,6 @@ spark-submit --verbose \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
-  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST $RANDOMIZEDQ\
+  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST $RANDOMIZEDQ $VARIABLE $REPARTITION\
   2>&1 | tee $LOGNAME
 

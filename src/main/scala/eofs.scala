@@ -66,10 +66,12 @@ object computeEOFs {
     val numeofs = args(4).toInt
     val outdest = args(5)
     val randomizedq = args(6)
+    val variable = args(7)
+    val repartition = args(8).toLong
     val oversample = 5
     val powIters = 10
     
-    val info = loadParquetClimateData(sc, inpath, numrows, numcols, preprocessMethod)
+    val info = loadParquetClimateData(sc, inpath, numrows, numcols, preprocessMethod,variable,repartition)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
     val (u,v) = 
@@ -104,8 +106,8 @@ object computeEOFs {
 
   // returns the processed matrix as well as a Product containing the information relevant to that processing:
   //
-  def loadParquetClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
-
+  def loadParquetClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String,variable:String,repartition:Long) : Product = {
+   /*
     val sqlctx = new org.apache.spark.sql.SQLContext(sc)
     import sqlctx.implicits._
 
@@ -117,7 +119,9 @@ object computeEOFs {
     }//.repartition(2880)
     //rows.persist(StorageLevel.MEMORY_ONLY_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
-
+    */
+    import org.nersc.io._
+    val tempmat = read.h5read_imat (sc,inpath, variable, repartition)
     if ("centerOverAllObservations" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
