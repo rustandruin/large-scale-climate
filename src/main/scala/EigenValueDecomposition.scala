@@ -107,6 +107,7 @@ private[mllib] object EigenValueDecomposition {
             " This flag is not compatible with Mode 1: A*x = lambda*x, A symmetric.")
       }
       iterLimit=iterLimit+1
+      println("Executing Iteration: " + iterLimit)
       // multiply working vector with the matrix
       val inputOffset = ipntr(0) - 1
       val outputOffset = ipntr(1) - 1
