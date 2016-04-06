@@ -3,12 +3,19 @@
  */
 
 package org.apache.spark.mllib.climate
+
+import org.apache.spark.mllib.linalg.distributed.IndexedRow
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix
+import org.nersc.io.read
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.linalg.{Matrices, DenseMatrix, Matrix, DenseVector, Vector, SparseVector, Vectors}
+
+import scala.io.Source
+
 //import org.apache.spark.mllib.linalg.EigenValueDecomposition
 import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.sql.{SQLContext, Row => SQLRow}
@@ -26,6 +33,7 @@ import java.util.zip.GZIPOutputStream
 import java.util.Calendar
 import java.text.SimpleDateFormat
 import org.apache.hadoop.io.compress.DefaultCodec
+import org.nersc.io._
 
 import org.msgpack.MessagePack;
 
@@ -59,19 +67,19 @@ object computeEOFs {
   }
 
   def appMain(sc: SparkContext, args: Array[String]) = {
-    val inpath = args(0)
+    val inpath = args(0) //a text file with the format path/to/h5/file dataset-name partitions
     val numrows = args(1).toInt
     val numcols = args(2).toLong
     val preprocessMethod = args(3)
     val numeofs = args(4).toInt
     val outdest = args(5)
     val randomizedq = args(6)
-    val variable = args(7)
-    val repartition = args(8).toLong
+    //val variable = args(7)
+    //val repartition = args(8).toLong
     val oversample = 5
     val powIters = 10
     
-    val info = loadParquetClimateData(sc, inpath, numrows, numcols, preprocessMethod,variable,repartition)
+    val info = loadH5ClimateData(sc, inpath, numrows, numcols, preprocessMethod)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
     val (u,v) = 
@@ -106,7 +114,7 @@ object computeEOFs {
 
   // returns the processed matrix as well as a Product containing the information relevant to that processing:
   //
-  def loadParquetClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String,variable:String,repartition:Long) : Product = {
+  def loadH5ClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
    /*
     val sqlctx = new org.apache.spark.sql.SQLContext(sc)
     import sqlctx.implicits._
@@ -120,8 +128,23 @@ object computeEOFs {
     //rows.persist(StorageLevel.MEMORY_ONLY_SER)
     val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
     */
-    import org.nersc.io._
-    val tempmat = read.h5read_imat (sc,inpath, variable, repartition)
+
+    //val tempmat = read.h5read_imat (sc,inpath, variable, repartition)
+    val lines = Source.fromFile(inpath).getLines.toArray
+    val params1 = lines(0).split(" ")
+    val partitions = params1(2).toLong
+    var rdd = read.h5read (sc,params1(0),params1(1),params1(2).toLong)
+    for (i <- 1 to lines.length -1) {
+      val params = lines(i).split(" ")
+      val rdd_temp = read.h5read(sc,params(0),params(1),params(2).toLong)
+      rdd = rdd.union(rdd_temp)
+    }
+    // coalesces it to the partitions that the first line requested b/c otherwise it will add all the partitions
+    val new_rdd = rdd.coalesce(partitions)
+    //rdd.cache()
+    val irow = new_rdd.zipWithIndex().map( k  => (k._1, k._2)).map(k => new IndexedRow(k._2, k._1))
+    val tempmat = new IndexedRowMatrix(irow)
+
     if ("centerOverAllObservations" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
