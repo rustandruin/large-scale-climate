@@ -6,7 +6,7 @@ DIR="$(cd "`dirname "$0"`"/..; pwd)"
 LOGDIR="$DIR/eventLogs"
 DATADIR="$DIR/data"
 JARNAME=$1
-
+INSOURCE=$2
 # for the small dataset
 #NUMROWS=104
 #NUMCOLS=6349676
@@ -19,7 +19,7 @@ NUMROWS=46715
 NUMCOLS=6349676
 #INSOURCE=hdfs://`hostname`:9000/user/ubuntu/CFSROparquet
 #INSOURCE=hdfs://`hostname`:9000/user/root/CFSROparquet
-INSOURCE=$SCRATCH/CFSROparquet
+#INSOURCE=$SCRATCH/CFSROparquet
 
 PREPROCESS="centerOverAllObservations"
 NUMEOFS=20
@@ -57,7 +57,7 @@ spark-submit --verbose \
   --master $SPARKURL \
   --driver-memory 70G \
   --executor-memory 100G \
-  --total-executor-cores 400 \
+#  --total-executor-cores 400 \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
@@ -67,5 +67,5 @@ spark-submit --verbose \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME \
-  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST \
+  $INSOURCE $NUMROWS $NUMCOLS $PREPROCESS $NUMEOFS $OUTDEST exact \
   2>&1 | tee $LOGNAME
