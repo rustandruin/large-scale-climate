@@ -99,12 +99,14 @@ private[mllib] object EigenValueDecomposition {
     val w = BDV(workd)
 
     var iterArpackDsaupdTime: Long = 0
+    var iterLimit: Int = 0
     // ido = 99 : done flag in reverse communication
-    while (ido.`val` != 99) {
+    while (ido.`val` != 99 && iterLimit < 70) {
       if (ido.`val` != -1 && ido.`val` != 1) {
         throw new IllegalStateException("ARPACK returns ido = " + ido.`val` +
             " This flag is not compatible with Mode 1: A*x = lambda*x, A symmetric.")
       }
+      iterLimit=iterLimit+1
       // multiply working vector with the matrix
       val inputOffset = ipntr(0) - 1
       val outputOffset = ipntr(1) - 1
