@@ -140,7 +140,7 @@ object computeEOFs {
       rdd = rdd.union(rdd_temp)
     }
     // coalesces it to the partitions that the first line requested b/c otherwise it will add all the partitions
-    val new_rdd = rdd.coalesce(partitions)
+    val new_rdd = rdd.coalesce(partitions.toInt)
     //rdd.cache()
     val irow = new_rdd.zipWithIndex().map( k  => (k._1, k._2)).map(k => new IndexedRow(k._2, k._1))
     val tempmat = new IndexedRowMatrix(irow)
