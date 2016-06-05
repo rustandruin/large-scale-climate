@@ -20,14 +20,15 @@ import breeze.numerics.{sqrt => BrzSqrt}
 import math.{ceil, log, cos, Pi}
 import scala.collection.mutable.ArrayBuffer
 
+import scala.io.Source
+import org.nersc.io._
+
 import java.util.Arrays
 import java.io.{DataOutputStream, BufferedOutputStream, FileOutputStream, File}
 import java.util.zip.GZIPOutputStream
 import java.util.Calendar
 import java.text.SimpleDateFormat
 import org.apache.hadoop.io.compress.DefaultCodec
-
-import org.msgpack.MessagePack;
 
 object computeEOFs {
 
@@ -82,14 +83,10 @@ object computeEOFs {
       val (u2,v2) = getApproxLowRankFactorization(mat, numeofs, oversample, powIters)
       val exactEOFs = convertLowRankFactorizationToEOFs(u1.asInstanceOf[DenseMatrix], v1.asInstanceOf[DenseMatrix])
       val inexactEOFs = convertLowRankFactorizationToEOFs(u2.asInstanceOf[DenseMatrix], v2.asInstanceOf[DenseMatrix])
-      writeOut(outdest + "exact", exactEOFs, info)
-      writeOut(outdest + "inexact", inexactEOFs, info)
       sc.stop()
       System.exit(0)
     }
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
-    // Only uncomment if we need the EOFs, otherwise we really only care about timing information
-    //writeOutBasic(outdest, climateEOFs, info)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
@@ -101,17 +98,12 @@ object computeEOFs {
   //
   def loadH5(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
 
-    val sqlctx = new org.apache.spark.sql.SQLContext(sc)
-    import sqlctx.implicits._
-
-    val rows = {
-      sqlctx.parquetFile(inpath + "/finalmat.parquet").rdd.map {
-        case SQLRow(index: Long, vector: Vector) =>
-          new IndexedRow(index, vector)
-      }
-    }//.repartition(2880)
-    //rows.persist(StorageLevel.MEMORY_ONLY_SER)
-    val tempmat = new IndexedRowMatrix(rows, numcols, numrows)
+    var lines = Source.fromFile(inpath).getLines.toArray
+    val params = lines(0).split(" ")
+    val filename = params(0)
+    val varname = params(1)
+    val partitions = params(2).toLong
+    val tempmat = read.h5read_imat(sc, filename, varname, partitions)
 
     if ("centerOverAllObservations" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
@@ -149,7 +141,7 @@ object computeEOFs {
         val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
         val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
 
-        sc.textFile(inpath + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.) )
+        sc.textFile(inpath + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
         sc.textFile(inpath + "/depths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
 
         val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
@@ -182,61 +174,6 @@ object computeEOFs {
         depth = 5
       )
       sse(0)
-  }
-
-  // a la https://gist.github.com/thiagozs/6699612
-  def writeOut(outdest: String, eofs: EOFDecomposition, info: Product) {
-    val outf = new GZIPOutputStream(new FileOutputStream(outdest))
-    val msgpack = new MessagePack();
-    val packer = msgpack.createPacker(outf)
-
-    packer.write(eofs.U.numCols) // number of EOFs
-    packer.write(eofs.U.numRows) // number of observation points
-    packer.write(eofs.U.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
-    packer.write(eofs.V.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
-    packer.write(eofs.S.toBreeze.asInstanceOf[BDV[Double]].toArray)
-    packer.write(info.productElement(1).asInstanceOf[BDV[Double]].toArray)
-    if (info.productArity == 3) {
-      packer.write(info.productElement(2).asInstanceOf[BDV[Double]].toArray) 
-    }
-  
-    outf.close()
-  }
-
-  def writeOutBasic(outdest: String, eofs: EOFDecomposition, info: Product) {
-    val outf = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(new File(outdest))))
-    dumpMat(outf, eofs.U.toBreeze.asInstanceOf[BDM[Double]])
-    dumpMat(outf, eofs.V.toBreeze.asInstanceOf[BDM[Double]])
-    dumpV(outf, eofs.S.toBreeze.asInstanceOf[BDV[Double]])
-    dumpV(outf, info.productElement(1).asInstanceOf[BDV[Double]])
-    if (info.productArity == 3) {
-      dumpV(outf, info.productElement(2).asInstanceOf[BDV[Double]])
-    }
-    outf.close()
-  }
-
-  def dumpV(outf: DataOutputStream, v: BDV[Double]) = {
-    outf.writeInt(v.length) 
-    for(i <- 0 until v.length) {
-      outf.writeDouble(v(i))
-    }
-  }
-
-  def dumpVI(outf: DataOutputStream, v: BDV[Int]) = {
-    outf.writeInt(v.length) 
-    for(i <- 0 until v.length) {
-      outf.writeInt(v(i))
-    }
-  }
-
-  def dumpMat(outf: DataOutputStream, mat: BDM[Double]) = {
-    outf.writeInt(mat.rows)
-    outf.writeInt(mat.cols)
-    for(i <- 0 until mat.rows) {
-      for(j <- 0 until mat.cols) {
-        outf.writeDouble(mat(i,j))
-      }
-    }
   }
 
   // returns a column vector of the means of each row
