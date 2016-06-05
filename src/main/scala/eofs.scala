@@ -13,7 +13,7 @@ import org.apache.spark.mllib.linalg.{Matrices, DenseMatrix, Matrix, DenseVector
 import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.sql.{SQLContext, Row => SQLRow}
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Axis, qr, svd, sum, SparseVector => BSV}
-import breeze.linalg.{norm, diag, accumulate, rank => BrzRank}
+import breeze.linalg.{norm, diag, accumulate, rank => BrzRank, convert}
 import breeze.linalg.{min, argmin}
 import breeze.stats.meanAndVariance
 import breeze.numerics.{sqrt => BrzSqrt}
@@ -60,49 +60,54 @@ object computeEOFs {
   }
 
   def appMain(sc: SparkContext, args: Array[String]) = {
-    val inpath = args(0)
-    val numrows = args(1).toInt
-    val numcols = args(2).toLong
-    val preprocessMethod = args(3)
-    val numeofs = args(4).toInt
-    val outdest = args(5)
-    val randomizedq = args(6)
-    val oversample = 5
-    val powIters = 10
+
+    val (inputHDF5Fname, varname, partitions, metadataDir, numeofs, outdest, preprocessMethod) =
+        readInputSpecification(args(0))
     
-    val info = loadH5(sc, inpath, numrows, numcols, preprocessMethod)
+    val info = loadH5(sc, inputHDF5Fname, varname, partitions, preprocessMethod, metadataDir)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
-    val (u,v) = 
-    if ("exact" == randomizedq) {
-      getLowRankFactorization(mat, numeofs)
-    } else if ("randomized" == randomizedq) {
-      getApproxLowRankFactorization(mat, numeofs, oversample, powIters)
-    } else if ("both" == randomizedq) {
-      val (u1,v1) = getLowRankFactorization(mat, numeofs)
-      val (u2,v2) = getApproxLowRankFactorization(mat, numeofs, oversample, powIters)
-      val exactEOFs = convertLowRankFactorizationToEOFs(u1.asInstanceOf[DenseMatrix], v1.asInstanceOf[DenseMatrix])
-      val inexactEOFs = convertLowRankFactorizationToEOFs(u2.asInstanceOf[DenseMatrix], v2.asInstanceOf[DenseMatrix])
-      sc.stop()
-      System.exit(0)
-    }
+    val (u,v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
+
+    val mean = info.productElement(1).asInstanceOf[BDV[Float]]
+    val latgrid = BDV(Source.fromFile(metadataDir + "latitudeValues.lst").getLines.toArray.map(x => x.toFloat))
+    val longrid = BDV(Source.fromFile(metadataDir + "longitudeValues.lst").getLines.toArray.map(x => x.toFloat))
+    val depths = BDV(Source.fromFile(metadataDir + "depthValues.lst").getLines.toArray.map(x => x.toFloat))
+    val dates = Source.fromFile(metadataDir + "columnDates.lst").getLines.toArray
+    val mapToLocations = Source.fromFile(metadataDir + "observedLocations.lst").getLines.toArray.map(x => x.toLong)
+    val brzU : BDM[Double] = climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]]
+    val brzS : BDV[Double] = climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]]
+    val brzV : BDM[Double] = climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]]
+    writeEOFs.writeEOFs(outdest, latgrid, longrid, depths, dates, 
+                        mapToLocations, preprocessMethod, mean, 
+                        convert(brzU, Float), convert(brzS, Float),
+                        convert(brzV, Float))
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
+  }
 
+
+  def readInputSpecification(fname: String) : Tuple7[String, String, Long, String, Int, String, String] = {
+    val lines = Source.fromFile(fname).getLines.toArray
+    var info = lines(0).split(" ")
+
+    val (inputHDF5Fname, varname, partitions) = (info(0), info(1), info(2).toInt)
+    val metadataDir = lines(1)
+    val numeofs = lines(2).toInt
+    val outdest = lines(3)
+    val preprocessMethod = lines(4)
+
+    (inputHDF5Fname, varname, partitions, metadataDir, numeofs, outdest, preprocessMethod)
   }
 
   // returns the processed matrix as well as a Product containing the information relevant to that processing:
   //
-  def loadH5(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
+  def loadH5(sc: SparkContext, filename: String, varname: String, partitions: Long, 
+             preprocessMethod: String, metadataDir: String) : Product = {
 
-    var lines = Source.fromFile(inpath).getLines.toArray
-    val params = lines(0).split(" ")
-    val filename = params(0)
-    val varname = params(1)
-    val partitions = params(2).toLong
     val tempmat = read.h5read_imat(sc, filename, varname, partitions)
 
     if ("centerOverAllObservations" == preprocessMethod) {
@@ -126,7 +131,7 @@ object computeEOFs {
       val centeredmat = subtractMean(tempmat, mean)
 
       val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
-      sc.textFile(inpath + "/latitudeweights.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
+      sc.textFile(metadataDir + "/latitudeweights.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
 
       val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -141,8 +146,8 @@ object computeEOFs {
         val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
         val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
 
-        sc.textFile(inpath + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
-        sc.textFile(inpath + "/depths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
+        sc.textFile(metadataDir + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
+        sc.textFile(metadataDir + "/depths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
 
         val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
         reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
