@@ -14,7 +14,4 @@ start-all.sh
 # generate the eofs
 sbt submit
 
-# convert the binary outputs to csv
-#sbt BinToNumpy2
-
 exit
