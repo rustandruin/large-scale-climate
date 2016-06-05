@@ -17,7 +17,7 @@ import breeze.linalg.{norm, diag, accumulate, rank => BrzRank}
 import breeze.linalg.{min, argmin}
 import breeze.stats.meanAndVariance
 import breeze.numerics.{sqrt => BrzSqrt}
-import math.{ceil, log}
+import math.{ceil, log, cos, Pi}
 import scala.collection.mutable.ArrayBuffer
 
 import java.util.Arrays
@@ -69,7 +69,7 @@ object computeEOFs {
     val oversample = 5
     val powIters = 10
     
-    val info = loadParquetClimateData(sc, inpath, numrows, numcols, preprocessMethod)
+    val info = loadH5(sc, inpath, numrows, numcols, preprocessMethod)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
     val (u,v) = 
@@ -99,7 +99,7 @@ object computeEOFs {
 
   // returns the processed matrix as well as a Product containing the information relevant to that processing:
   //
-  def loadParquetClimateData(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
+  def loadH5(sc: SparkContext, inpath: String, numrows: Int, numcols: Long, preprocessMethod: String) : Product = {
 
     val sqlctx = new org.apache.spark.sql.SQLContext(sc)
     import sqlctx.implicits._
@@ -136,23 +136,38 @@ object computeEOFs {
       val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
       sc.textFile(inpath + "/latitudeweights.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
 
-      val reweightedmat = areaWeight(centeredmat, latitudeweights)
+      val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
       reweightedmat.rows.count()
       //rows.unpersist()
 
-      (reweightedmat, areaWeight(mean, latitudeweights))
+      (reweightedmat, reweigh(mean, latitudeweights))
+    } else if ("center+cosLat+depth" == preprocessMethod) {
+        val mean = getRowMeans(tempmat)
+        val centeredmat = subtractMean(tempmat, mean)
+
+        val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
+        val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
+
+        sc.textFile(inpath + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.) )
+        sc.textFile(inpath + "/depths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
+
+        val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
+        reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+        reweightedmat.rows.count()
+
+        (reweightedmat, reweigh(mean, latitudeweights :* depthweights))
     } else {
       None
     }
   }
 
-  def areaWeight(mat: IndexedRowMatrix, weights: BDV[Double]) : IndexedRowMatrix = {
+  def reweigh(mat: IndexedRowMatrix, weights: BDV[Double]) : IndexedRowMatrix = {
     val reweightedrows = mat.rows.map(x => new IndexedRow(x.index, new DenseVector((x.vector.toBreeze.asInstanceOf[BDV[Double]] * weights(x.index.toInt)).toArray)) )
     new IndexedRowMatrix(reweightedrows, mat.numRows, mat.numCols.toInt)
   }
 
-  def areaWeight(vec: BDV[Double], weights: BDV[Double]) : BDV[Double] = {
+  def reweigh(vec: BDV[Double], weights: BDV[Double]) : BDV[Double] = {
     vec :* weights
   }
 
