@@ -8,4 +8,4 @@ CURDIR="$(cd "`dirname "$0"`"; pwd)"
 
 PLATFORM="CORI"
 
-$CURDIR/runOneJob.sh $1 $PLATFORM 20 
+$CURDIR/runOneJob.sh $1 $PLATFORM $DIR/input.spec

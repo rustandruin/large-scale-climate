@@ -1,0 +1,18 @@
+#!/bin/bash -l
+
+#SBATCH -N 21
+#SBATCH -p debug
+#SBATCH -t 00:30:00
+#SBATCH --ccm
+#SBATCH --qos=premium
+
+bash
+module load spark/1.5.1 sbt
+export SPARK_LOCAL_DIRS="/tmp,/dev/shm"
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lib
+start-all.sh
+
+# generate the eofs
+sbt submit
+
+exit
