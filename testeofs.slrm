@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -N 21
+#SBATCH -N 13
 #SBATCH -p debug
-#SBATCH -t 00:30:00
+#SBATCH -t 00:08:00
 #SBATCH --ccm
 #SBATCH --qos=premium
 
@@ -13,6 +13,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lib
 start-all.sh
 
 # generate the eofs
-sbt submit
+./src/testEOFs.sh /global/cscratch1/sd/gittens/large-scale-climate/target/scala-2.10/large-scale-climate-assembly-0.0.1.jar
 
 exit

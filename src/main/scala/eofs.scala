@@ -30,6 +30,8 @@ import java.util.Calendar
 import java.text.SimpleDateFormat
 import org.apache.hadoop.io.compress.DefaultCodec
 
+import org.slf4j.LoggerFactory
+
 object computeEOFs {
 
   def report(message: String, verbose: Boolean = true) = {
@@ -60,22 +62,27 @@ object computeEOFs {
   }
 
   def appMain(sc: SparkContext, args: Array[String]) = {
+    val logger = LoggerFactory.getLogger(getClass)
+    logger.info("blah")
 
     val (inputHDF5Fname, varname, partitions, metadataDir, numeofs, outdest, preprocessMethod) =
         readInputSpecification(args(0))
-    
     val info = loadH5(sc, inputHDF5Fname, varname, partitions, preprocessMethod, metadataDir)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
+    val numrows = mat.rows.count()
+    val numcols = mat.rows.first.vector.asInstanceOf[DenseVector].size
+
+    report(s"loaded  a $numrows by $numcols matrix")
     val (u,v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
 
     val mean = info.productElement(1).asInstanceOf[BDV[Float]]
-    val latgrid = BDV(Source.fromFile(metadataDir + "latitudeValues.lst").getLines.toArray.map(x => x.toFloat))
-    val longrid = BDV(Source.fromFile(metadataDir + "longitudeValues.lst").getLines.toArray.map(x => x.toFloat))
-    val depths = BDV(Source.fromFile(metadataDir + "depthValues.lst").getLines.toArray.map(x => x.toFloat))
-    val dates = Source.fromFile(metadataDir + "columnDates.lst").getLines.toArray
-    val mapToLocations = Source.fromFile(metadataDir + "observedLocations.lst").getLines.toArray.map(x => x.toLong)
+    val latgrid = BDV(Source.fromFile(metadataDir + "/latList.lst").getLines.toArray.map(x => x.toFloat))
+    val longrid = BDV(Source.fromFile(metadataDir + "/lonList.lst").getLines.toArray.map(x => x.toFloat))
+    val depths = BDV(Source.fromFile(metadataDir + "/depthList.lst").getLines.toArray.map(x => x.toFloat))
+    val dates = Source.fromFile(metadataDir + "/columnDates.lst").getLines.toArray
+    val mapToLocations = Source.fromFile(metadataDir + "/observedLocations.lst").getLines.toArray.map(x => x.toLong)
     val brzU : BDM[Double] = climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]]
     val brzS : BDV[Double] = climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]]
     val brzV : BDM[Double] = climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]]
@@ -108,6 +115,7 @@ object computeEOFs {
   def loadH5(sc: SparkContext, filename: String, varname: String, partitions: Long, 
              preprocessMethod: String, metadataDir: String) : Product = {
 
+    report("Reading " + filename + " " + varname + " " + partitions.toString)
     val tempmat = read.h5read_imat(sc, filename, varname, partitions)
 
     if ("centerOverAllObservations" == preprocessMethod) {
@@ -146,8 +154,8 @@ object computeEOFs {
         val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
         val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
 
-        sc.textFile(metadataDir + "/latitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
-        sc.textFile(metadataDir + "/depths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
+        sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
+        sc.textFile(metadataDir + "/observedDepths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
 
         val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
         reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -280,12 +288,13 @@ object computeEOFs {
   // Returns `1/n * mat.transpose * mat * rhs`
   def multiplyCovarianceBy(mat: IndexedRowMatrix, rhs: DenseMatrix): DenseMatrix = {
     report(s"Going to multiply the covariance operator of a ${mat.numRows}-by-${mat.numCols} matrix by a ${rhs.numRows}-by-${rhs.numCols} matrix")
+    val logger = LoggerFactory.getLogger(getClass)
     val rhsBrz = rhs.toBreeze.asInstanceOf[BDM[Double]]
     val result = 
       mat.rows.treeAggregate(BDM.zeros[Double](mat.numCols.toInt, rhs.numCols))(
         seqOp = (U: BDM[Double], row: IndexedRow) => {
           val rowBrz = row.vector.toBreeze.asInstanceOf[BDV[Double]]
-          U += row.vector.toBreeze.asInstanceOf[BDV[Double]].asDenseMatrix.t * (row.vector.toBreeze.asInstanceOf[BDV[Double]].asDenseMatrix * rhs.toBreeze.asInstanceOf[BDM[Double]])
+          U += rowBrz.asDenseMatrix.t * (rowBrz.asDenseMatrix * rhs.toBreeze.asInstanceOf[BDM[Double]])
         },
         combOp = (U1, U2) => U1 += U2
       )
