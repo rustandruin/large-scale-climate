@@ -5,7 +5,7 @@ package org.apache.spark.mllib.climate
 import ucar.nc2.{NetcdfFileWriter, Dimension, Variable, Attribute};
 import ucar.ma2.{DataType, ArrayChar, ArrayFloat}
 import java.util.ArrayList
-import breeze.linalg.{DenseMatrix, DenseVector}
+import breeze.linalg.{DenseMatrix, DenseVector, convert}
 
 object writeEOFs {
 
@@ -70,16 +70,16 @@ object writeEOFs {
 
         writer = NetcdfFileWriter.openExisting(fname)
 
-        write1DFloatArray(writer, "lat", lats)
-        write1DFloatArray(writer, "lon", lons)
-        write1DFloatArray(writer, "depth", depths)
+        write1DFloatArray(writer, "lat", convert(lats, Float))
+        write1DFloatArray(writer, "lon", convert(lons, Float))
+        write1DFloatArray(writer, "depth", convert(depths, Float))
         writeStringArray(writer, "coldates", dates)
 
-        write2DFloatArray(writer, "temporalEOFs", V.t)
-        write1DFloatArray(writer, "singvals", S)
-        writeEOF(writer, "meanTemps", mapToLocations, mean, fillValue)
+        write2DFloatArray(writer, "temporalEOFs", convert(V.t, Float))
+        write1DFloatArray(writer, "singvals", convert(S, Float))
+        writeEOF(writer, "meanTemps", mapToLocations, convert(mean, Float), fillValue)
         for (idx <- 0 until S.length) 
-            writeEOF(writer, "EOF" + idx.toString, mapToLocations, U(::, idx), fillValue)
+            writeEOF(writer, "EOF" + idx.toString, mapToLocations, convert(U(::, idx), Float), fillValue)
        
         writer.close()
     }

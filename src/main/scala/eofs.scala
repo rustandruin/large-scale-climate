@@ -77,7 +77,7 @@ object computeEOFs {
     val (u,v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
 
-    val mean = info.productElement(1).asInstanceOf[BDV[Float]]
+    val mean = info.productElement(1).asInstanceOf[BDV[Double]]
     val latgrid = BDV(Source.fromFile(metadataDir + "/latList.lst").getLines.toArray.map(x => x.toFloat))
     val longrid = BDV(Source.fromFile(metadataDir + "/lonList.lst").getLines.toArray.map(x => x.toFloat))
     val depths = BDV(Source.fromFile(metadataDir + "/depthList.lst").getLines.toArray.map(x => x.toFloat))
@@ -86,10 +86,15 @@ object computeEOFs {
     val brzU : BDM[Double] = climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]]
     val brzS : BDV[Double] = climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]]
     val brzV : BDM[Double] = climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]]
+
+    val brzUfloat : BDM[Float] = convert(brzU, Float)
+    val brzVfloat : BDM[Float] = convert(brzV, Float)
+    val brzSfloat : BDV[Float] = convert(brzS, Float)
+    val brzmeanfloat : BDV[Float] = convert(mean, Float)
+
     writeEOFs.writeEOFs(outdest, latgrid, longrid, depths, dates, 
-                        mapToLocations, preprocessMethod, mean, 
-                        convert(brzU, Float), convert(brzS, Float),
-                        convert(brzV, Float))
+                        mapToLocations, preprocessMethod, brzmeanfloat,
+                        brzUfloat, brzSfloat, brzVfloat)
 
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
