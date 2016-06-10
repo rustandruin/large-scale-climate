@@ -70,10 +70,12 @@ object computeEOFs {
     val info = loadH5(sc, inputHDF5Fname, varname, partitions, preprocessMethod, metadataDir)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
+    // replace w/ something that doesn't touch the RDD
     val numrows = mat.rows.count()
     val numcols = mat.rows.first.vector.asInstanceOf[DenseVector].size
+    val frobnorm = mat.rows.map(x => x.vector.asInstanceOf[DenseVector].toArray.map(x => x*x).reduce(_ + _)).collect.reduce(_ + _)
 
-    report(s"loaded  a $numrows by $numcols matrix")
+    report(s"loaded a $numrows by $numcols matrix with square frobenius norm $frobnorm")
     val (u,v) = getLowRankFactorization(mat, numeofs)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
 
@@ -86,6 +88,11 @@ object computeEOFs {
     val brzU : BDM[Double] = climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]]
     val brzS : BDV[Double] = climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]]
     val brzV : BDM[Double] = climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]]
+
+    report(s"spatial eofs have squared frobenius norm ${brzU.data.map(x => x*x).reduce(_ + _)}")
+    report(s"temporal eofs have squared frobenius norm ${brzV.data.map(x => x*x).reduce(_ + _)}")
+    report(s"singular values have squared frobenius norm ${brzS.data.map(x => x*x).reduce(_ + _)}")
+    report(s"mean values have squared frobenius norm ${mean.data.map(x => x*x).reduce(_ + _)}")
 
     val brzUfloat : BDM[Float] = convert(brzU, Float)
     val brzVfloat : BDM[Float] = convert(brzV, Float)

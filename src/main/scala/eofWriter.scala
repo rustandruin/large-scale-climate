@@ -6,6 +6,7 @@ import ucar.nc2.{NetcdfFileWriter, Dimension, Variable, Attribute};
 import ucar.ma2.{DataType, ArrayChar, ArrayFloat}
 import java.util.ArrayList
 import breeze.linalg.{DenseMatrix, DenseVector, convert}
+import scala.util.control.Breaks._
 
 object writeEOFs {
 
@@ -91,15 +92,20 @@ object writeEOFs {
 
         var curIndex = 0
         var curWriteIndexOffset = 0
-        for(depth <- 0 until shape(0); lat <- 0 until shape(1); lon <- 0 until shape(2)) {
-           if (curIndex == writeIndices(curWriteIndexOffset)) {
-                eofVals.set(depth, lat, lon, eofValues(curIndex))
-                curWriteIndexOffset += 1
-           }
-           else
-                eofVals.set(depth, lat, lon, fillValue)
-           curIndex += 1
+        breakable {
+            for(depth <- 0 until shape(0); lat <- 0 until shape(1); lon <- 0 until shape(2)) {
+               if (curIndex == writeIndices(curWriteIndexOffset)) {
+                    eofVals.set(depth, lat, lon, eofValues(curIndex))
+                    curWriteIndexOffset += 1
+               }
+               else
+                    eofVals.set(depth, lat, lon, fillValue)
+               curIndex += 1
+               if (curIndex == eofValues.size) break
+            }
         }
+
+        writer.write(eofVar, eofVals)
     }
 
 
