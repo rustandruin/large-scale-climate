@@ -92,17 +92,15 @@ object writeEOFs {
 
         var curIndex = 0
         var curWriteIndexOffset = 0
-        breakable {
-            for(depth <- 0 until shape(0); lat <- 0 until shape(1); lon <- 0 until shape(2)) {
-               if (curIndex == writeIndices(curWriteIndexOffset)) {
-                    eofVals.set(depth, lat, lon, eofValues(curIndex))
-                    curWriteIndexOffset += 1
-               }
-               else
-                    eofVals.set(depth, lat, lon, fillValue)
-               curIndex += 1
-               if (curIndex == eofValues.size) break
-            }
+        for(depth <- 0 until shape(0); lat <- 0 until shape(1); lon <- 0 until shape(2)) {
+           if (curWriteIndexOffset == eofValues.size) 
+                eofVals.set(depth, lat, lon, fillValue)
+           else if (curIndex == writeIndices(curWriteIndexOffset)) {
+                eofVals.set(depth, lat, lon, eofValues(curWriteIndexOffset))
+                curWriteIndexOffset += 1
+           } else
+                eofVals.set(depth, lat, lon, fillValue)
+           curIndex += 1
         }
 
         writer.write(eofVar, eofVals)

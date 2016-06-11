@@ -32,6 +32,22 @@ import org.apache.hadoop.io.compress.DefaultCodec
 
 import org.slf4j.LoggerFactory
 
+import org.msgpack.annotation.Message
+import org.msgpack.ScalaMessagePack
+import java.io.FileOutputStream
+
+@Message
+class EOFinfo {
+    var numeofs: Int = 0
+    var numobs: Int = 0
+    var numgridpts: Int = 0
+
+    var U : Array[Float] = Array.empty[Float]
+    var V : Array[Float] = Array.empty[Float]
+    var S : Array[Float] = Array.empty[Float]
+    var mean : Array[Float] = Array.empty[Float]
+}
+
 object computeEOFs {
 
   def report(message: String, verbose: Boolean = true) = {
@@ -103,6 +119,25 @@ object computeEOFs {
                         mapToLocations, preprocessMethod, brzmeanfloat,
                         brzUfloat, brzSfloat, brzVfloat)
 
+    val meanmsgpack = brzmeanfloat.toArray
+    val Umsgpack = brzUfloat.toDenseVector.toArray
+    val Vmsgpack = brzVfloat.toDenseVector.toArray
+    val Smsgpack = brzSfloat.toArray
+
+    val obj = new EOFinfo()
+    obj.numeofs = numeofs
+    obj.numobs = mat.numCols.toInt
+    obj.numgridpts = mat.numRows.toInt
+    obj.U = Umsgpack
+    obj.V = Vmsgpack
+    obj.S = Smsgpack
+    obj.mean = meanmsgpack
+
+    val serialized : Array[Byte] = ScalaMessagePack.write(obj)
+    val out = new FileOutputStream(outdest + ".msgpack")
+    out.write(serialized)
+    out.close 
+    
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
@@ -130,7 +165,7 @@ object computeEOFs {
     report("Reading " + filename + " " + varname + " " + partitions.toString)
     val tempmat = read.h5read_imat(sc, filename, varname, partitions)
 
-    if ("centerOverAllObservations" == preprocessMethod) {
+    if ("center" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
       centeredmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -146,12 +181,12 @@ object computeEOFs {
       //rows.unpersist()
 
       (standardizedmat, mean, stdv)
-    }else if ("cosLat+centerOverAllObservations" == preprocessMethod) {
+    }else if ("cosLat+center" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
 
       val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
-      sc.textFile(metadataDir + "/latitudeweights.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
+      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
 
       val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
