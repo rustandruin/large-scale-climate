@@ -186,7 +186,7 @@ object computeEOFs {
       val centeredmat = subtractMean(tempmat, mean)
 
       val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
-      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = pair(1).toDouble )
+      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
 
       val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)

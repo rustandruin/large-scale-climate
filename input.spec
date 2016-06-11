@@ -2,4 +2,4 @@
 /global/cscratch1/sd/gittens/conversion-code/ocean_conversion/testOutputs
 3
 /global/cscratch1/sd/gittens/conversion-code/ocean_conversion/testOutputs/testeofs.nc
-center+cosLat
+center
