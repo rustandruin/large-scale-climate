@@ -181,7 +181,7 @@ object computeEOFs {
       //rows.unpersist()
 
       (standardizedmat, mean, stdv)
-    }else if ("cosLat+center" == preprocessMethod) {
+    }else if ("center+cosLat" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
 
