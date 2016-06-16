@@ -86,13 +86,8 @@ object computeEOFs {
     val info = loadH5(sc, inputHDF5Fname, varname, partitions, preprocessMethod, metadataDir)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
 
-    // replace w/ something that doesn't touch the RDD
-    val numrows = mat.rows.count()
-    val numcols = mat.rows.first.vector.asInstanceOf[DenseVector].size
-    val frobnorm = mat.rows.map(x => x.vector.asInstanceOf[DenseVector].toArray.map(x => x*x).reduce(_ + _)).collect.reduce(_ + _)
-
-    report(s"loaded a $numrows by $numcols matrix with square frobenius norm $frobnorm")
-    val (u,v) = getLowRankFactorization(mat, numeofs)
+    //val (u,v) = getLowRankFactorization(mat, numeofs)
+    val (u, v) = getChunkedLowRankFactorization(sc, mat, numeofs, 10)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
 
     val mean = info.productElement(1).asInstanceOf[BDV[Double]]
@@ -101,24 +96,17 @@ object computeEOFs {
     val depths = BDV(Source.fromFile(metadataDir + "/depthList.lst").getLines.toArray.map(x => x.toFloat))
     val dates = Source.fromFile(metadataDir + "/columnDates.lst").getLines.toArray
     val mapToLocations = Source.fromFile(metadataDir + "/observedLocations.lst").getLines.toArray.map(x => x.toLong)
-    val brzU : BDM[Double] = climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]]
-    val brzS : BDV[Double] = climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]]
-    val brzV : BDM[Double] = climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]]
 
-    report(s"spatial eofs have squared frobenius norm ${brzU.data.map(x => x*x).reduce(_ + _)}")
-    report(s"temporal eofs have squared frobenius norm ${brzV.data.map(x => x*x).reduce(_ + _)}")
-    report(s"singular values have squared frobenius norm ${brzS.data.map(x => x*x).reduce(_ + _)}")
-    report(s"mean values have squared frobenius norm ${mean.data.map(x => x*x).reduce(_ + _)}")
-
-    val brzUfloat : BDM[Float] = convert(brzU, Float)
-    val brzVfloat : BDM[Float] = convert(brzV, Float)
-    val brzSfloat : BDV[Float] = convert(brzS, Float)
-    val brzmeanfloat : BDV[Float] = convert(mean, Float)
+    val brzmeanfloat = convert(mean, Float)
+    val brzUfloat = convert(climateEOFs.U.toBreeze.asInstanceOf[BDM[Double]], Float)
+    val brzSfloat = convert(climateEOFs.S.toBreeze.asInstanceOf[BDV[Double]], Float)
+    val brzVfloat = convert(climateEOFs.V.toBreeze.asInstanceOf[BDM[Double]], Float)
 
     writeEOFs.writeEOFs(outdest, latgrid, longrid, depths, dates, 
                         mapToLocations, preprocessMethod, brzmeanfloat,
                         brzUfloat, brzSfloat, brzVfloat)
 
+/*
     val meanmsgpack = brzmeanfloat.toArray
     val Umsgpack = brzUfloat.toDenseVector.toArray
     val Vmsgpack = brzVfloat.toDenseVector.toArray
@@ -141,6 +129,7 @@ object computeEOFs {
     report(s"U - ${climateEOFs.U.numRows}-by-${climateEOFs.U.numCols}")
     report(s"S - ${climateEOFs.S.size}")
     report(s"V - ${climateEOFs.V.numRows}-by-${climateEOFs.V.numCols}")
+    */
   }
 
 
@@ -292,6 +281,20 @@ object computeEOFs {
     val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
     val qr.QR(q,r) = qr.reduced(Xlowrank)
     //report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
+    (fromBreeze(q), fromBreeze(r*u.t)) 
+  }
+
+  // returns U V with k columns so that U*V.t is an optimal rank-k approximation to mat and U has orthogonal columns
+  def getChunkedLowRankFactorization(sc: SparkContext, mat: IndexedRowMatrix, rank: Int, numPartitions: Int) : Tuple2[DenseMatrix, DenseMatrix] = {
+    val tol = 1e-13
+    val maxIter = 30
+    val chunkedCovar = chunkedCovariancePCA.collectChunkedCovarianceMatrix(sc, mat, numPartitions)
+    chunkedCovar.persist(StorageLevel.MEMORY_ONLY_SER)
+
+    val covOperator = ( v: BDV[Double] ) => chunkedCovariancePCA.multiplyChunkedCovarianceBy(chunkedCovar, v.toDenseMatrix).toDenseVector
+    val (lambda, u) = EigenValueDecomposition.symmetricEigs(covOperator, mat.numCols.toInt, rank, tol, maxIter)
+    val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
+    val qr.QR(q,r) = qr.reduced(Xlowrank)
     (fromBreeze(q), fromBreeze(r*u.t)) 
   }
 

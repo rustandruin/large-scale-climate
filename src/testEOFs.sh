@@ -24,14 +24,19 @@ EXECUTORMEMORY="210G"
 MASTER="spark://ec2-54-187-175-26.us-west-2.compute.amazonaws.com:7077"
 elif [ $PLATFORM == "CORI" ]; then 
   # On Cori there are 32 cores/node and 128GB/node
-  # To have a fair comparison to EC2, use more physical nodes but less cores per node so that each core has the same amount of memory as on EC2:
-  # on EC2, 32 cores have 210G, so configure Cori so 16 cores have 105G, then on EC2 have 30 nodes, so need 60 on Cori
 #NUMEXECUTORS=60
 #NUMCORES=16
 NUMEXECUTORS=12
 NUMCORES=32
 DRIVERMEMORY=100G
 EXECUTORMEMORY=100G
+MASTER=$SPARKURL
+elif [ $PLATFORM == "EDISON" ]; then
+  # On Edison there are 12 cores/node and 64GB/node
+NUMEXECUTORS=36
+NUMCORES=12
+DRIVERMEMORY=55G
+EXECUTORMEMORY=55G
 MASTER=$SPARKURL
 fi
 
