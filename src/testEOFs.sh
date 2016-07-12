@@ -5,7 +5,7 @@
 DIR="$(cd "`dirname "$0"`"/..; pwd)"
 LOGDIR=$DIR/eventLogs
 JARNAME=$1
-PLATFORM=CORI
+PLATFORM=EDISON
 INPUTSPEC=$DIR/input.spec
 
 JOBNAME=$INPUTSPEC
@@ -36,11 +36,10 @@ elif [ $PLATFORM == "EDISON" ]; then
 NUMEXECUTORS=36
 NUMCORES=12
 DRIVERMEMORY=55G
-EXECUTORMEMORY=55G
+EXECUTORMEMORY=40G
 MASTER=$SPARKURL
 fi
 
-#  --conf spark.task.maxFailures=4 \
 #  --conf spark.worker.timeout=1200000 \
 #  --conf spark.network.timeout=1200000 \
 spark-submit --verbose \
@@ -52,6 +51,7 @@ spark-submit --verbose \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
+  --conf spark.task.maxFailures=4 \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME $INPUTSPEC 2>&1 | tee $LOGNAME

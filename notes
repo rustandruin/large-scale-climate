@@ -1,0 +1,1 @@
+I was getting executor lost failures on Edison, with no indication of why (memory seemed to be sufficient), until I lowered the executor memory limits to 40G from 55G--- so I think the ramdisk and Spark were competing for memory
