@@ -11,6 +11,7 @@
 bash
 module load spark/1.5.1 
 #export SPARK_LOCAL_DIRS="/tmp,/dev/shm"
+export SPARK_LOCAL_DIRS="/tmp"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lib
 start-all.sh
 

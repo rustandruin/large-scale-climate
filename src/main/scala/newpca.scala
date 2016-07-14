@@ -79,8 +79,10 @@ object chunkedCovariancePCA {
           // treeDepth really should be computed based on memory: e.g. 2698-by-2698 DP chunks are about 54MB, so assuming we have 1GB on each executor that will be collecting,
           // about 20 will fit, so we can use a tree of depth ceil(log(numPartitions)/log(20)) to reduce
           logger.info(s"Using a reduction tree of depth $treeDepth")
-          val newChunk = mat.rows.mapPartitions(computeCovarianceChunks(rowIdx, colIdx)).treeReduce(_+_, depth=treeDepth)
-                         //treeAggregate(zeroVal)( _ + _, _ + _, depth=treeDepth)
+          val newChunkSummands = mat.rows.mapPartitions(computeCovarianceChunks(rowIdx, colIdx))
+	  logger.info(s"done computing the ${newChunkSummands.count} summands for this chunk")
+	  val newChunk = newChunkSummands.treeReduce(_+_, depth=treeDepth)
+
           logger.info("Done computing chunk")
           chunkArray += ((chunkIndices(rowIdx), chunkIndices(colIdx), newChunk))
 
