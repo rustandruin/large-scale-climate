@@ -1,18 +1,19 @@
 #!/bin/bash -l
 
-#SBATCH -N 61
-#SBATCH -p debug
-#SBATCH -t 00:30:00
-#SBATCH --ccm
+#SBATCH -N 31
+#SBATCH -p regular
+#SBATCH -t 03:00:00
 #SBATCH --qos=premium
+##SBATCH --volume="/global/cscratch1/sd/gittens/spark_tmp_dir/climate_tests:/tmp:perNodeCache=size=200G"
 
+# Run the full ocean dataset on Cori
 bash
-module load spark/1.5.1 sbt
-export SPARK_LOCAL_DIRS="/tmp,/dev/shm"
+module load spark/1.5.1 
+export SPARK_LOCAL_DIRS="/tmp"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lib
 start-all.sh
 
 # generate the eofs
-sbt submit
+./src/runEOFs.sh /global/cscratch1/sd/gittens/large-scale-climate/target/scala-2.10/large-scale-climate-assembly-0.0.1.jar
 
 exit

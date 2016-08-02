@@ -17,7 +17,7 @@ import breeze.linalg.{norm, diag, accumulate, rank => BrzRank, convert}
 import breeze.linalg.{min, argmin}
 import breeze.stats.meanAndVariance
 import breeze.numerics.{sqrt => BrzSqrt}
-import math.{ceil, log, cos, Pi}
+import math.{ceil, log, cos, sqrt, Pi}
 import scala.collection.mutable.ArrayBuffer
 
 import scala.io.Source
@@ -89,9 +89,9 @@ object computeEOFs {
     mat.rows.count() //force materialization to store in memory
     logger.info(s"Loaded a matrix with dimensions ${mat.numRows}-by-${mat.numCols}")
 
-    //val (u,v) = getLowRankFactorization(mat, numeofs)
-    logger.info(s"Computing the covariance matrix in ${numChunkPartitions}^2 blocks")
-    val (u, v) = getChunkedLowRankFactorization(sc, mat, numeofs, numChunkPartitions)
+    val (u,v) = getLowRankFactorization(mat, numeofs)
+    //logger.info(s"Computing the covariance matrix in ${numChunkPartitions}^2 blocks")
+    //val (u, v) = getChunkedLowRankFactorization(sc, mat, numeofs, numChunkPartitions)
     val climateEOFs = convertLowRankFactorizationToEOFs(u.asInstanceOf[DenseMatrix], v.asInstanceOf[DenseMatrix])
 
     val mean = info.productElement(1).asInstanceOf[BDV[Double]]
@@ -177,7 +177,7 @@ object computeEOFs {
       val centeredmat = subtractMean(tempmat, mean)
 
       val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
-      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
+      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = sqrt(cos(pair(1).toDouble * Pi/180.0)) )
 
       val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -190,7 +190,7 @@ object computeEOFs {
         val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
         val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
 
-        sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = cos(pair(1).toDouble * Pi/180.0) )
+        sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = sqrt(cos(pair(1).toDouble * Pi/180.0)) )
         sc.textFile(metadataDir + "/observedDepths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
 
         val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)

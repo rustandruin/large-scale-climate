@@ -1,12 +1,12 @@
 #!/bin/bash -l
 
-#SBATCH -N 37
+#SBATCH -N 13
 #SBATCH -p regular
 #SBATCH -t 01:00:00
-#SBATCH --ccm
 #SBATCH --qos=premium
-#SBATCH --volume="/scratch1/scratchdirs/gittens/spark_tmp_dir/climate_tests:/tmp:perNodeCache=size=200G"
+##SBATCH --volume="/global/cscratch1/sd/gittens/spark_tmp_dir/climate_tests:/tmp:perNodeCache=size=200G"
 
+# for CORI
 
 bash
 module load spark/1.5.1 
@@ -16,6 +16,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lib
 start-all.sh
 
 # generate the eofs
-./src/testEOFs.sh /scratch1/scratchdirs/gittens/fromCori/large-scale-climate/target/scala-2.10/large-scale-climate-assembly-0.0.1.jar
+./src/testEOFs.sh /global/cscratch1/sd/gittens/large-scale-climate/target/scala-2.10/large-scale-climate-assembly-0.0.1.jar
 
 exit
