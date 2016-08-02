@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH -N 31
+#SBATCH -N 13
 #SBATCH -p regular
 #SBATCH -t 03:00:00
 #SBATCH --qos=premium

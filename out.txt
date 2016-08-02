@@ -1,0 +1,2 @@
+start-slave.sh: NOT in master doing /usr/common/software/spark/1.5.1/sbin/spark-daemon.sh start org.apache.spark.deploy.worker.Worker 1 --webui-port 8081 spark://nid00802:7077
+starting org.apache.spark.deploy.worker.Worker, logging to /global/cscratch1/sd/gittens/spark/2805940/spark-gittens-org.apache.spark.deploy.worker.Worker-1-nid00804.out

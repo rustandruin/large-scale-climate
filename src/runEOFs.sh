@@ -6,24 +6,23 @@ DIR="$(cd "`dirname "$0"`"/..; pwd)"
 LOGDIR=$DIR/eventLogs
 JARNAME=$1
 PLATFORM=CORI
-INPUTSPEC=$DIR/fullinput.spec
+INPUTSPEC=$DIR/testinput.spec
 
 JOBNAME=$INPUTSPEC
 LOGNAME="$JOBNAME.log"
 
-#[ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
+[ -e $OUTDEST ] && (echo "Job already run successfully, stopping"; exit 1)
 
 if [ $PLATFORM == "CORI" ]; then 
   # On Cori there are 32 cores/node and 128GB/node
-NUMEXECUTORS=30
+NUMEXECUTORS=12
 NUMCORES=28
 DRIVERMEMORY=100G
 EXECUTORMEMORY=100G
-MASTER=$SPARKURL
+# MASTER=$SPARKURL
 fi
 
 spark-submit --verbose \
-  --master $MASTER \
   --num-executors $NUMEXECUTORS \
   --executor-cores $NUMCORES \
   --driver-memory $DRIVERMEMORY \
