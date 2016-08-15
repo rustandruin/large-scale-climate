@@ -11,3 +11,4 @@ conversion_error_log
 data/*
 *.out
 metastore_db/*
+out.txt

@@ -86,7 +86,9 @@ object computeEOFs {
 
     val info = loadH5(sc, inputHDF5Fname, varname, partitions, preprocessMethod, metadataDir)
     val mat = info.productElement(0).asInstanceOf[IndexedRowMatrix]
+    mat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
     mat.rows.count() //force materialization to store in memory
+    logger.info(s"persisting of input matrix done")
     logger.info(s"Loaded a matrix with dimensions ${mat.numRows}-by-${mat.numCols}")
 
     val (u,v) = getLowRankFactorization(mat, numeofs)
@@ -155,21 +157,24 @@ object computeEOFs {
   def loadH5(sc: SparkContext, filename: String, varname: String, partitions: Long, 
              preprocessMethod: String, metadataDir: String) : Product = {
 
-    report("Reading " + filename + " " + varname + " " + partitions.toString)
+    report("Lazily reading " + filename + " " + varname + " " + partitions.toString)
     val tempmat : IndexedRowMatrix = read.h5read_imat(sc, filename, varname, partitions)
     tempmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+    report("Starting to preprocess the matrix")
 
     val result =
     if ("center" == preprocessMethod) {
       val mean = getRowMeans(tempmat)
       val centeredmat = subtractMean(tempmat, mean)
       centeredmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      centeredmat.rows.count() // force materialization and storage
 
       (centeredmat, mean)
     }else if ("standardizeEach" == preprocessMethod) {
       val (mean, stdv) = getRowMeansAndStd(tempmat)
       val standardizedmat = standardize(tempmat, mean, stdv)
       standardizedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      standardizedmat.rows.count() // force materialization and storage
 
       (standardizedmat, mean, stdv)
     }else if ("center+cosLat" == preprocessMethod) {
@@ -181,22 +186,24 @@ object computeEOFs {
 
       val reweightedmat = reweigh(centeredmat, latitudeweights)
       reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      reweightedmat.rows.count() // force materialization and storage
 
       (reweightedmat, reweigh(mean, latitudeweights))
     } else if ("center+cosLat+depth" == preprocessMethod) {
-        val mean = getRowMeans(tempmat)
-        val centeredmat = subtractMean(tempmat, mean)
+      val mean = getRowMeans(tempmat)
+      val centeredmat = subtractMean(tempmat, mean)
 
-        val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
-        val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
+      val latitudeweights = BDV.zeros[Double](tempmat.numRows.toInt)
+      val depthweights = BDV.zeros[Double](tempmat.numRows.toInt)
 
-        sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = sqrt(cos(pair(1).toDouble * Pi/180.0)) )
-        sc.textFile(metadataDir + "/observedDepths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
+      sc.textFile(metadataDir + "/observedLatitudes.csv").map( line => line.split(",") ).collect.map( pair => latitudeweights(pair(0).toInt) = sqrt(cos(pair(1).toDouble * Pi/180.0)) )
+      sc.textFile(metadataDir + "/observedDepths.csv").map( line => line.split(",") ).collect.map( pair => depthweights(pair(0).toInt) = pair(1).toDouble )
 
-        val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
-        reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      val reweightedmat = reweigh(centeredmat, latitudeweights :* depthweights)
+      reweightedmat.rows.persist(StorageLevel.MEMORY_ONLY_SER)
+      reweightedmat.rows.count() // force materialization and storage
 
-        (reweightedmat, reweigh(mean, latitudeweights :* depthweights))
+      (reweightedmat, reweigh(mean, latitudeweights :* depthweights))
     } else {
       None
     }
@@ -346,7 +353,7 @@ object computeEOFs {
     val logger = LoggerFactory.getLogger(getClass)
     val rhsBrz = rhs.toBreeze.asInstanceOf[BDM[Double]]
     val result = 
-      mat.rows.aggregate(BDM.zeros[Double](mat.numCols.toInt, rhs.numCols))(
+      mat.rows.treeAggregate(BDM.zeros[Double](mat.numCols.toInt, rhs.numCols))(
         seqOp = (U: BDM[Double], row: IndexedRow) => {
           val rowBrz = row.vector.toBreeze.asInstanceOf[BDV[Double]]
           U += rowBrz.asDenseMatrix.t * (rowBrz.asDenseMatrix * rhs.toBreeze.asInstanceOf[BDM[Double]])

@@ -28,20 +28,11 @@ elif [ $PLATFORM == "CORI" ]; then
 #NUMCORES=16
 NUMEXECUTORS=12
 NUMCORES=28
-DRIVERMEMORY=100G
-EXECUTORMEMORY=100G
-MASTER=$SPARKURL
-elif [ $PLATFORM == "EDISON" ]; then
-  # On Edison there are 12 cores/node and 64GB/node
-NUMEXECUTORS=36
-NUMCORES=12
-DRIVERMEMORY=55G
-EXECUTORMEMORY=40G
-MASTER=$SPARKURL
+DRIVERMEMORY=90G
+EXECUTORMEMORY=90G
 fi
 
 spark-submit --verbose \
-  --master $MASTER \
   --num-executors $NUMEXECUTORS \
   --executor-cores $NUMCORES \
   --driver-memory $DRIVERMEMORY \
@@ -49,7 +40,6 @@ spark-submit --verbose \
   --conf spark.eventLog.enabled=true \
   --conf spark.eventLog.dir=$LOGDIR \
   --conf spark.driver.maxResultSize=30G \
-  --conf spark.task.maxFailures=4 \
   --jars $JARNAME \
   --class org.apache.spark.mllib.climate.computeEOFs \
   $JARNAME $INPUTSPEC 2>&1 | tee $LOGNAME
