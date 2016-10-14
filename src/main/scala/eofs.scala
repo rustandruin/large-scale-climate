@@ -286,10 +286,8 @@ object computeEOFs {
     val maxIter = 30
     val covOperator = ( v: BDV[Double] ) => multiplyCovarianceBy(mat, fromBreeze(v.toDenseMatrix).transpose).toBreeze.asInstanceOf[BDM[Double]].toDenseVector
     val (lambda, u) = EigenValueDecomposition.symmetricEigs(covOperator, mat.numCols.toInt, rank, tol, maxIter)
-    //report(s"Square Frobenius norm of approximate row basis for data: ${u.data.map(x=>x*x).sum}")
     val Xlowrank = mat.multiply(fromBreeze(u)).toBreeze()
     val qr.QR(q,r) = qr.reduced(Xlowrank)
-    //report(s"Square Frobenius norms of Q,R: ${q.data.map(x=>x*x).sum}, ${r.data.map(x=>x*x).sum}") 
     (fromBreeze(q), fromBreeze(r*u.t)) 
   }
 
